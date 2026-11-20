@@ -91,8 +91,13 @@ luz, probabilidad de tormenta, riesgo de aludes.
 - La barra ya no es Waybar: Omarchy la cambió por su propio shell (Quickshell) con plugins. La
   fase 2 es un plugin de Omarchy (ver la skill `omarchy`, guía `plugins.md`), no un módulo de Waybar.
 - La carpeta está en MEGA. `.megaignore` excluye `target/` para no sincronizar lo compilado; `.git`
-  tampoco se sincroniza (lo excluye el `.megaignore` general). El historial de git vive solo en este
-  equipo hasta que haya un remoto en GitHub.
+  tampoco se sincroniza (lo excluye el `.megaignore` general).
+- Repositorio público: https://github.com/alrubearb-sys/montana (licencia MIT o Apache 2.0). El
+  historial vive ahí. Los commits usan el correo noreply de GitHub, nunca el Gmail personal.
+- El trabajo se organiza con issues y una milestone por fase. Para saber qué toca:
+  `gh issue list -R alrubearb-sys/montana --milestone "Phase 1: CLI forecast for one area"`.
+  Los commits que terminan una tarea llevan "closes #N". README e issues en inglés; este archivo y
+  `docs/` en castellano.
 
 ## Pendiente de decidir
 
