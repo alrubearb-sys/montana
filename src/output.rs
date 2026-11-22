@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use serde::Serialize;
 
 use crate::data::elevation::Source;
@@ -19,50 +21,57 @@ pub fn to_json(report: &Report) -> Result<String, Error> {
     serde_json::to_string(report).map_err(Error::UnexpectedData)
 }
 
-pub fn print_report(report: &Report) {
-    println!("{}", report.name);
-    print_forecast("Summit", &report.summit);
+pub fn print_report(out: &mut impl Write, report: &Report) -> io::Result<()> {
+    writeln!(out, "{}", report.name)?;
+    print_forecast(out, "Summit", &report.summit)?;
     if let Some(base) = &report.base {
-        print_forecast("Base", base);
+        print_forecast(out, "Base", base)?;
     }
-    println!("\n{}", report.credits);
+    writeln!(out, "\n{}", report.credits)?;
+    Ok(())
 }
 
-pub fn print_place(number: usize, place: &Place) {
+pub fn print_place(out: &mut impl Write, number: usize, place: &Place) -> io::Result<()> {
     let elevation = match place.elevation {
         Some(elevation) => format!("{} m", elevation.0),
         None => String::from("no elevation"),
     };
-    println!(
+    writeln!(
+        out,
         "{number}. {} ({}, {elevation}): {}",
         place.name, place.kind, place.description
-    );
+    )?;
+    Ok(())
 }
 
-pub fn print_point(label: &str, point: Point) {
-    println!(
+pub fn print_point(out: &mut impl Write, label: &str, point: Point) -> io::Result<()> {
+    writeln!(
+        out,
         "{label}: {} m ({}, {})",
         point.elevation.0, point.latitude, point.longitude
-    );
+    )?;
+    Ok(())
 }
 
-fn print_forecast(label: &str, forecast: &Forecast) {
-    println!();
-    print_point(label, forecast.point);
+fn print_forecast(out: &mut impl Write, label: &str, forecast: &Forecast) -> io::Result<()> {
+    writeln!(out)?;
+    print_point(out, label, forecast.point)?;
     for day in &forecast.days {
-        println!(
+        writeln!(
+            out,
             "{} sun {}-{}",
             weekday(day.sunrise, forecast.utc_offset_seconds),
             clock(day.sunrise, forecast.utc_offset_seconds),
             clock(day.sunset, forecast.utc_offset_seconds)
-        );
+        )?;
     }
     for hour in &forecast.hours {
-        print_hour(hour, forecast.utc_offset_seconds);
+        print_hour(out, hour, forecast.utc_offset_seconds)?;
     }
+    Ok(())
 }
 
-fn print_hour(hour: &HourlyForecast, offset: i32) {
+fn print_hour(out: &mut impl Write, hour: &HourlyForecast, offset: i32) -> io::Result<()> {
     let snow_line = hour
         .snow_line
         .map_or(String::from("-"), |line| format!("{} m", line.0));
@@ -72,7 +81,8 @@ fn print_hour(hour: &HourlyForecast, offset: i32) {
     let high_wind = hour
         .high_wind
         .map_or(String::from("-"), |wind| format!("{:.0} km/h", wind.0));
-    println!(
+    writeln!(
+        out,
         "{} {} {:?}, {} °C, rain or snow {} mm ({probability}), fresh snow {} cm, snow depth {} m, \
          wind {} km/h, gusts {} km/h, high wind {high_wind}, visibility {} m, sunshine {} min, freezing level {} m, \
          snow line {snow_line}",
@@ -88,7 +98,8 @@ fn print_hour(hour: &HourlyForecast, offset: i32) {
         hour.visibility.0,
         hour.sunshine.as_secs() / 60,
         hour.freezing_level.0,
-    );
+    )?;
+    Ok(())
 }
 
 fn weekday(time: UnixTime, offset: i32) -> &'static str {

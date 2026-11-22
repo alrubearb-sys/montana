@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io;
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -6,12 +7,13 @@ pub enum Error {
     AlreadySaved(String),
     BadCoordinates(String),
     BadFile(PathBuf, serde_json::Error),
-    File(PathBuf, std::io::Error),
+    File(PathBuf, io::Error),
     MissingData(&'static str),
     MissingHome,
     Network(Box<ureq::Error>),
     NoElevation,
     NoResults(String),
+    Output(io::Error),
     ResultOutOfRange { chosen: usize, available: usize },
     UnexpectedData(serde_json::Error),
     UnknownArea(String),
@@ -30,6 +32,7 @@ impl fmt::Display for Error {
             Error::Network(source) => write!(f, "the request failed: {source}"),
             Error::NoElevation => write!(f, "no elevation found for this place"),
             Error::NoResults(query) => write!(f, "no places found for {query}"),
+            Error::Output(source) => write!(f, "cannot print the result: {source}"),
             Error::ResultOutOfRange { chosen, available } => {
                 write!(f, "result {chosen} does not exist, choose 1 to {available}")
             }
@@ -47,7 +50,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::BadFile(_, source) | Error::UnexpectedData(source) => Some(source),
-            Error::File(_, source) => Some(source),
+            Error::File(_, source) | Error::Output(source) => Some(source),
             Error::Network(source) => Some(source),
             Error::AlreadySaved(_)
             | Error::BadCoordinates(_)
@@ -65,5 +68,11 @@ impl std::error::Error for Error {
 impl From<ureq::Error> for Error {
     fn from(source: ureq::Error) -> Self {
         Error::Network(Box::new(source))
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(source: io::Error) -> Self {
+        Error::Output(source)
     }
 }
