@@ -13,8 +13,8 @@ pub struct Point {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Area {
     pub name: String,
-    pub base: Point,
     pub summit: Point,
+    pub base: Option<Point>,
 }
 
 #[expect(dead_code, reason = "used by the ranking in phase 3")]

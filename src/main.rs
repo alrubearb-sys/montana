@@ -5,6 +5,8 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
+use crate::model::Point;
+
 /// Should I go to the mountains?
 #[derive(Parser)]
 #[command(version)]
@@ -22,11 +24,16 @@ fn main() -> ExitCode {
     };
 
     println!("{}", area.name);
-    for (label, point) in [("Base", area.base), ("Summit", area.summit)] {
-        println!(
-            "{label}: {} m ({}, {})",
-            point.elevation.0, point.latitude, point.longitude
-        );
+    print_point("Summit", area.summit);
+    if let Some(base) = area.base {
+        print_point("Base", base);
     }
     ExitCode::SUCCESS
+}
+
+fn print_point(label: &str, point: Point) {
+    println!(
+        "{label}: {} m ({}, {})",
+        point.elevation.0, point.latitude, point.longitude
+    );
 }
