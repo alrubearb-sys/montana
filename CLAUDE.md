@@ -73,12 +73,14 @@ Cobertura: toda Europa, sin base de datos propia. El usuario busca o hace clic i
 y el programa elige la fuente por detrás. Solo se guardan las zonas favoritas.
 
 - Tiempo: Open-Meteo, por coordenadas y altitud, gratis y sin clave.
-- Buscar un sitio: servicio sin decidir y fácil de cambiar por configuración. Candidato: Nominatim
-  público, pendiente de que Alejandro lea su política (1 petición por segundo, User-Agent propio,
-  citar la fuente, nada de autocompletar): https://operations.osmfoundation.org/policies/nominatim/
-  No usar el buscador de Open-Meteo: con "Bödele" da un pico de Liechtenstein.
-- Altitud: la de OpenStreetMap si el sitio la trae; si no, swisstopo en Suiza y terrain tiles de AWS
-  en el resto. La de Open-Meteo se queda de 14 a 215 m por debajo en los picos probados.
+- Buscar un sitio: Nominatim público, decidido por Alejandro el 2026-11-22 para uso personal. Respetar
+  su política (https://operations.osmfoundation.org/policies/nominatim/): 1 petición por segundo,
+  User-Agent propio, guardar resultados, citar la fuente, nada de autocompletar y dirección
+  configurable. Con más usuarios hay que cambiar de servicio. No usar el buscador de Open-Meteo: con
+  "Bödele" da un pico de Liechtenstein.
+- Altitud: la de OpenStreetMap si el sitio la trae; si no, swisstopo en Suiza y, de momento,
+  Open-Meteo en el resto (terrain tiles de AWS es más precisa, pero pide un crate para leer PNG).
+  Open-Meteo se queda de 14 a 215 m por debajo en los picos probados.
 - Mapas: swisstopo (CH), basemap.at (AT), TopPlusOpen (DE), IGN (FR y ES) y OpenTopoMap (resto).
 - Cota de nieve: en los Pirineos (Aneto) Open-Meteo no la da en ninguna hora.
 - Aludes: SLF solo cubre Suiza; avalanche.report da regiones de Austria e Italia. Sin fuente aún para
@@ -118,6 +120,8 @@ luz, probabilidad de tormenta, riesgo de aludes.
   `gh issue list -R alrubearb-sys/montana --milestone "Phase 1: CLI forecast for one area"`.
   Los commits que terminan una tarea llevan "closes #N". README e issues en inglés; este archivo y
   `docs/` en castellano.
+- Permiso de Alejandro (2026-11-22): subir cada tarea terminada a `main` cuando fmt, clippy y test
+  pasen. Los issues nuevos, los crates y cualquier otra cosa pública se siguen preguntando.
 
 ## Pendiente de decidir
 
