@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -13,6 +14,9 @@ const URL: &str = "https://api.open-meteo.com/v1/forecast";
 const HOURLY: &str = "temperature_2m,precipitation,precipitation_probability,snowfall,snow_depth,\
 wind_speed_10m,wind_gusts_10m,visibility,sunshine_duration,freezing_level_height,snowfall_height,\
 weather_code";
+
+// Pressure levels, from about 550 m to about 5600 m.
+const LEVELS: [&str; 8] = ["950", "925", "900", "850", "800", "700", "600", "500"];
 
 // Open-Meteo sends one list per value, all in the same order as `time`.
 #[derive(Deserialize)]
@@ -37,6 +41,9 @@ struct Hourly {
     freezing_level_height: Vec<Option<f64>>,
     snowfall_height: Vec<Option<f64>>,
     weather_code: Vec<Option<u8>>,
+    // Wind speed and height of every pressure level.
+    #[serde(flatten)]
+    levels: BTreeMap<String, Vec<Option<f64>>>,
 }
 
 #[derive(Deserialize)]
@@ -46,13 +53,14 @@ struct Daily {
 }
 
 pub fn request(point: Point) -> Result<Forecast, Error> {
+    let hourly = hourly_variables();
     let json = get(
         URL,
         &[
             ("latitude", &point.latitude.to_string()),
             ("longitude", &point.longitude.to_string()),
             ("elevation", &point.elevation.0.to_string()),
-            ("hourly", HOURLY),
+            ("hourly", &hourly),
             ("daily", "sunrise,sunset"),
             ("timeformat", "unixtime"),
             ("timezone", "auto"),
@@ -62,10 +70,29 @@ pub fn request(point: Point) -> Result<Forecast, Error> {
     parse(point, &json)
 }
 
+fn hourly_variables() -> String {
+    let mut variables = String::from(HOURLY);
+    for level in LEVELS {
+        variables.push(',');
+        variables.push_str(&wind_key(level));
+        variables.push(',');
+        variables.push_str(&height_key(level));
+    }
+    variables
+}
+
+fn wind_key(level: &str) -> String {
+    format!("wind_speed_{level}hPa")
+}
+
+fn height_key(level: &str) -> String {
+    format!("geopotential_height_{level}hPa")
+}
+
 fn parse(point: Point, json: &str) -> Result<Forecast, Error> {
     let answer: Answer = serde_json::from_str(json).map_err(Error::UnexpectedData)?;
     let hours = (0..answer.hourly.time.len())
-        .map(|index| hour(&answer.hourly, index))
+        .map(|index| hour(&answer.hourly, index, point.elevation))
         .collect::<Result<Vec<_>, _>>()?;
     let days = answer
         .daily
@@ -85,7 +112,7 @@ fn parse(point: Point, json: &str) -> Result<Forecast, Error> {
     })
 }
 
-fn hour(hourly: &Hourly, index: usize) -> Result<HourlyForecast, Error> {
+fn hour(hourly: &Hourly, index: usize, elevation: Meters) -> Result<HourlyForecast, Error> {
     let number = |list: &[Option<f64>], name| required(list, index, name);
     let sunshine = number(&hourly.sunshine_duration, "sunshine_duration")?;
     Ok(HourlyForecast {
@@ -102,6 +129,7 @@ fn hour(hourly: &Hourly, index: usize) -> Result<HourlyForecast, Error> {
         snow_depth: Meters(number(&hourly.snow_depth, "snow_depth")?),
         wind: KilometersPerHour(number(&hourly.wind_speed_10m, "wind_speed_10m")?),
         gusts: KilometersPerHour(number(&hourly.wind_gusts_10m, "wind_gusts_10m")?),
+        high_wind: high_wind(&hourly.levels, index, elevation),
         visibility: Meters(number(&hourly.visibility, "visibility")?),
         sunshine: Duration::try_from_secs_f64(sunshine)
             .map_err(|_| Error::MissingData("sunshine_duration"))?,
@@ -112,6 +140,30 @@ fn hour(hourly: &Hourly, index: usize) -> Result<HourlyForecast, Error> {
         snow_line: optional(&hourly.snowfall_height, index).map(Meters),
         precipitation_probability: optional(&hourly.precipitation_probability, index).map(Percent),
     })
+}
+
+fn high_wind(
+    levels: &BTreeMap<String, Vec<Option<f64>>>,
+    index: usize,
+    elevation: Meters,
+) -> Option<KilometersPerHour> {
+    let value = |key: String| levels.get(&key).and_then(|list| optional(list, index));
+    let known: Vec<(f64, f64)> = LEVELS
+        .iter()
+        .filter_map(|level| Some((value(height_key(level))?, value(wind_key(level))?)))
+        .collect();
+    interpolate(&known, elevation.0).map(KilometersPerHour)
+}
+
+// Straight line between the levels just below and just above; `None` outside of them.
+fn interpolate(levels: &[(f64, f64)], height: f64) -> Option<f64> {
+    levels
+        .iter()
+        .zip(levels.iter().skip(1))
+        .find(|((low, _), (high, _))| low < high && (*low..=*high).contains(&height))
+        .map(|((low, below), (high, above))| {
+            below + (above - below) * (height - low) / (high - low)
+        })
 }
 
 fn required<T: Copy>(list: &[Option<T>], index: usize, name: &'static str) -> Result<T, Error> {
@@ -195,6 +247,31 @@ mod tests {
             parse(POINT, &json),
             Err(Error::MissingData("temperature_2m"))
         ));
+    }
+
+    #[test]
+    fn high_wind_is_stronger_than_ground_wind() {
+        let aneto = Point {
+            elevation: Meters(3404.0),
+            ..POINT
+        };
+        let first = &parse(aneto, ANETO).unwrap().hours[0];
+
+        assert_eq!(first.wind, KilometersPerHour(35.6));
+        let high_wind = first.high_wind.unwrap().0;
+        assert!((high_wind - 76.264).abs() < 0.001);
+    }
+
+    #[test]
+    fn interpolates_between_levels() {
+        let levels = [(1000.0, 10.0), (1500.0, 20.0), (3000.0, 50.0)];
+
+        assert_eq!(interpolate(&levels, 1000.0), Some(10.0));
+        assert_eq!(interpolate(&levels, 1250.0), Some(15.0));
+        assert_eq!(interpolate(&levels, 3000.0), Some(50.0));
+        assert_eq!(interpolate(&levels, 900.0), None);
+        assert_eq!(interpolate(&levels, 3001.0), None);
+        assert_eq!(interpolate(&[], 1000.0), None);
     }
 
     #[test]

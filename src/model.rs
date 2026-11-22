@@ -68,6 +68,8 @@ pub struct HourlyForecast {
     pub snow_depth: Meters,
     pub wind: KilometersPerHour,
     pub gusts: KilometersPerHour,
+    /// Wind in the free air at the elevation of the point, not slowed down by the ground.
+    pub high_wind: Option<KilometersPerHour>,
     pub visibility: Meters,
     pub sunshine: Duration,
     pub freezing_level: Meters,

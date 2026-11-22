@@ -73,6 +73,9 @@ Cobertura: toda Europa, sin base de datos propia. El usuario busca o hace clic i
 y el programa elige la fuente por detrás. Solo se guardan las zonas favoritas.
 
 - Tiempo: Open-Meteo, por coordenadas y altitud, gratis y sin clave.
+- Viento: el de 10 m se queda muy corto en las cimas (Aneto, media de un día: 21,7 km/h frente a 65,1
+  en aire libre). Para decidir, usar `high_wind`, interpolado entre niveles de presión.
+- Espesor de nieve: solo orientativo (Aneto, 1 cm a 3404 m). Buscar otra fuente después del panel.
 - Buscar un sitio: Nominatim público, decidido por Alejandro el 2026-11-22 para uso personal. Respetar
   su política (https://operations.osmfoundation.org/policies/nominatim/): 1 petición por segundo,
   User-Agent propio, guardar resultados, citar la fuente, nada de autocompletar y dirección

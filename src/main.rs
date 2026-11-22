@@ -137,9 +137,12 @@ fn print_hour(hour: &HourlyForecast, offset: i32) {
     let probability = hour
         .precipitation_probability
         .map_or(String::from("-"), |percent| format!("{} %", percent.0));
+    let high_wind = hour
+        .high_wind
+        .map_or(String::from("-"), |wind| format!("{:.0} km/h", wind.0));
     println!(
         "{} {} {:?}, {} °C, rain or snow {} mm ({probability}), fresh snow {} cm, snow depth {} m, \
-         wind {} km/h, gusts {} km/h, visibility {} m, sunshine {} min, freezing level {} m, \
+         wind {} km/h, gusts {} km/h, high wind {high_wind}, visibility {} m, sunshine {} min, freezing level {} m, \
          snow line {snow_line}",
         weekday(hour.time, offset),
         clock(hour.time, offset),
