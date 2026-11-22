@@ -10,6 +10,8 @@ más que cualquier app del tiempo, incluido el widget de temperatura que ya trae
 
 ## Decisiones tomadas
 
+- Rápido y con poca RAM: es la razón de usar Rust. Nada de procesos siempre abiertos si no hacen
+  falta, ni navegadores incrustados (Tauri, Electron) en la barra. Medir antes de elegir.
 - Lenguaje: Rust. No C++ (de C++ solo quiero nociones para leerlo y saber qué hace).
 - Descartado: CLI de gastos (ya tengo el MCP de Caudal) y proyecto Monte Carlo (solo valdría para
   el CV, lo haría la IA y no lo usaría).
@@ -19,6 +21,9 @@ más que cualquier app del tiempo, incluido el widget de temperatura que ya trae
 Herramienta de terminal en Rust, más un módulo de la barra de Omarchy, que dice si merece la pena
 salir a la montaña. Pensada para esquí y también para escalada y alpinismo, con dos modos: esquí y
 montaña.
+
+Se abre con un clic en la barra, a la derecha del tiempo de Omarchy, y despliega un panel con los
+datos y una gráfica por horas. En el Mac hará lo mismo desde la barra de menús, con el look de Omarchy.
 
 Lo que la diferencia de una app del tiempo (la idea que más me gusta): comparar mis zonas favoritas
 ("¿cuál es mejor este sábado?") con un ranking según mis propios criterios. Ejemplo de zona: Bödele
@@ -34,10 +39,11 @@ Ideas para añadir después:
 
 El proyecto es para aprender Rust de verdad (ownership, tipos, errores, async, arquitectura).
 
-- Alejandro escribe el modelo de datos y las firmas de las funciones.
-- Claude Code guía paso a paso, explica cada decisión de diseño y los errores del compilador,
-  revisa su código y rellena solo lo mecánico cuando él lo pida.
-- No escribir módulos enteros por él ni adelantarse a la fase siguiente.
+- Claude Code escribe el código. Alejandro toma las decisiones, lee el código y lo entiende.
+- Antes de cada paso, plantear las decisiones que le tocan, con una recomendación. Después,
+  explicar el código nuevo por partes y enlazarlo con lo que ha leído del libro.
+- Pasos pequeños, para que pueda leerlos, y sin adelantarse a la fase siguiente.
+- La aplicación va entera en inglés: código, nombres, comentarios y lo que ve el usuario.
 - Explicaciones simples y en castellano de España, una recomendación clara en vez de varias opciones.
 
 ## Reglas de código
@@ -47,14 +53,14 @@ Sacadas de `docs/buenas-practicas.md` (lo que hacen Zed, ruff, uv, rust-lang y o
 1. Antes de dar un paso por terminado, ejecutar `cargo fmt`, `cargo clippy` con avisos como errores
    y `cargo test`, y enseñarme la orden y su salida. No dar por hecho que un aviso o un test roto ya
    estaba antes.
-2. Errores del compilador: explicarme qué significan y por qué salen, y darme una pista. No
-   arreglarlos por mí salvo que lo pida.
+2. Errores del compilador: arreglarlos y, si enseñan algo de Rust, explicar qué significaban y por
+   qué salían.
 3. Nada de `unwrap()`, `expect()` ni `panic!` fuera de los tests. Los errores se propagan con
    `Result` y `?`, con un tipo de error propio.
 4. Usar enums propios en vez de cadenas o booleanos, y `match` completos sin `_`. Si hay que
    silenciar un aviso de Clippy, usar `#[expect]` y explicarme por qué.
 5. No añadir ni actualizar crates sin preguntarme antes.
-6. En `ranking`, cada regla nueva empieza por un test que falla; los tests de `datos` usan JSON
+6. En `ranking`, cada regla nueva empieza por un test que falla; los tests de `data` usan JSON
    guardado de Open-Meteo y del SLF, sin red.
 7. Cambios pequeños y solo lo pedido, sin funciones ni archivos extra. Comentarios solo para
    explicar el porqué, nunca sobre la conversación ni sobre la edición.
@@ -72,18 +78,20 @@ luz, probabilidad de tormenta, riesgo de aludes.
 
 ## Arquitectura prevista
 
-- `modelo`: estructuras de zona y pronóstico, enums, tipos propios.
-- `datos`: peticiones HTTP async y JSON con serde, errores con `Result`.
+- `model`: estructuras de zona y pronóstico, enums, tipos propios.
+- `data`: peticiones HTTP async y JSON con serde, errores con `Result`.
 - `ranking`: puntuación de zonas según mis criterios.
-- `salida`: CLI con clap y salida JSON (texto y tooltip) para la barra; el clic en la barra lanza
-  otra acción.
+- `output`: CLI con clap y salida JSON. Es el motor común: los paneles solo pintan ese JSON.
+- Panel de Omarchy: plugin QML (`bar-widget` con panel) que corre dentro del shell y llama al motor.
+- Panel del Mac: app nativa en Rust, sin navegador. Candidata: Slint, que hay que medir antes.
 
 ## Fases
 
-1. CLI que devuelve el pronóstico de una zona (por ejemplo Bödele, Vorarlberg).
-2. Módulo de la barra con esa salida.
+1. CLI que devuelve el pronóstico de una zona (por ejemplo Bödele, Vorarlberg), también en JSON.
+2. Plugin de Omarchy: botón en la barra y panel con datos y gráfica.
 3. Ranking comparando varias zonas.
-4. Opcional: mapa de Suiza clicable (ventana ligera con Tauri, Leaflet y OpenStreetMap, con Rust
+4. App de barra para el Mac con el mismo panel y el look de Omarchy.
+5. Opcional: mapa de Suiza clicable (ventana ligera con Tauri, Leaflet y OpenStreetMap, con Rust
    de backend).
 
 ## Notas del sistema
