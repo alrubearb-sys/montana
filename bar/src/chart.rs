@@ -1,0 +1,137 @@
+// Size of the charts in panel.slint, with y growing downwards.
+const WIDTH: f64 = 370.0;
+const HEIGHT: f64 = 68.0;
+const STEPS: [f64; 8] = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0];
+const MAX_STEPS: f64 = 4.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Scale {
+    low: f64,
+    high: f64,
+    step: f64,
+}
+
+impl Scale {
+    pub fn around(values: &[f64]) -> Self {
+        let low = values.iter().copied().fold(f64::INFINITY, f64::min);
+        let high = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        if !low.is_finite() || !high.is_finite() {
+            return Self::between(0.0, 1.0);
+        }
+        Self::between(low, high)
+    }
+
+    pub fn from_zero(values: &[f64], at_least: f64) -> Self {
+        Self::between(0.0, values.iter().copied().fold(at_least, f64::max))
+    }
+
+    fn between(low: f64, high: f64) -> Self {
+        let fit = |step: f64| {
+            let low = (low / step).floor() * step;
+            let high = ((high / step).ceil() * step).max(low + step);
+            Self { low, high, step }
+        };
+        STEPS
+            .iter()
+            .map(|step| fit(*step))
+            .find(|scale| (scale.high - scale.low) / scale.step <= MAX_STEPS)
+            .unwrap_or_else(|| fit(500.0))
+    }
+
+    /// 0 at the top of the chart and 1 at the bottom.
+    pub fn position(self, value: f64) -> f64 {
+        (self.high - value) / (self.high - self.low)
+    }
+
+    pub fn ticks(self) -> Vec<f64> {
+        let mut ticks = Vec::new();
+        let mut value = self.low;
+        while value <= self.high + self.step / 2.0 {
+            ticks.push(value);
+            value += self.step;
+        }
+        ticks
+    }
+}
+
+pub fn line(values: &[f64], scale: Scale) -> String {
+    let slot = slot(values);
+    let mut path = String::new();
+    for (index, value) in values.iter().enumerate() {
+        let command = if index == 0 { 'M' } else { 'L' };
+        let x = (position(index) + 0.5) * slot;
+        let y = scale.position(*value) * HEIGHT;
+        path.push_str(&format!("{command} {x:.1} {y:.1} "));
+    }
+    path
+}
+
+pub fn bars(values: &[f64], scale: Scale) -> String {
+    let slot = slot(values);
+    let mut path = String::new();
+    for (index, value) in values.iter().enumerate().filter(|(_, value)| **value > 0.0) {
+        let left = (position(index) + 0.1) * slot;
+        let right = (position(index) + 0.9) * slot;
+        let top = scale.position(*value) * HEIGHT;
+        path.push_str(&format!(
+            "M {left:.1} {HEIGHT} L {left:.1} {top:.1} L {right:.1} {top:.1} L {right:.1} {HEIGHT} Z "
+        ));
+    }
+    path
+}
+
+fn slot(values: &[f64]) -> f64 {
+    WIDTH / position(values.len().max(1))
+}
+
+fn position(index: usize) -> f64 {
+    u32::try_from(index).map_or(0.0, f64::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scale_has_round_ticks() {
+        assert_eq!(Scale::around(&[-3.2, 4.1]).ticks(), [-5.0, 0.0, 5.0]);
+        assert_eq!(Scale::around(&[0.2, 2.9]).ticks(), [0.0, 1.0, 2.0, 3.0]);
+        assert_eq!(Scale::from_zero(&[0.0, 0.3], 1.0).ticks(), [0.0, 1.0]);
+        assert_eq!(
+            Scale::from_zero(&[73.0], 1.0).ticks(),
+            [0.0, 20.0, 40.0, 60.0, 80.0]
+        );
+    }
+
+    #[test]
+    fn flat_and_empty_values_have_a_scale() {
+        assert_eq!(Scale::around(&[2.0, 2.0]).ticks(), [2.0, 3.0]);
+        assert_eq!(Scale::around(&[]).ticks(), [0.0, 1.0]);
+    }
+
+    #[test]
+    fn high_values_are_at_the_top() {
+        let scale = Scale::from_zero(&[80.0], 1.0);
+
+        assert_eq!(scale.position(80.0), 0.0);
+        assert_eq!(scale.position(0.0), 1.0);
+    }
+
+    #[test]
+    fn line_goes_through_the_middle_of_each_hour() {
+        let scale = Scale::from_zero(&[4.0], 1.0);
+
+        assert_eq!(line(&[0.0, 4.0], scale), "M 92.5 68.0 L 277.5 0.0 ");
+    }
+
+    #[test]
+    fn bars_skip_empty_hours() {
+        let scale = Scale::from_zero(&[4.0], 1.0);
+
+        assert_eq!(bars(&[0.0, 0.0], scale), "");
+        assert_eq!(
+            bars(&[0.0, 2.0], scale),
+            "M 203.5 68 L 203.5 34.0 L 351.5 34.0 L 351.5 68 Z "
+        );
+    }
+}

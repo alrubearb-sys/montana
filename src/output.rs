@@ -17,8 +17,8 @@ pub struct Report {
     pub credits: &'static str,
 }
 
-pub fn to_json(report: &Report) -> Result<String, Error> {
-    serde_json::to_string(report).map_err(Error::UnexpectedData)
+pub fn to_json<T: Serialize>(value: &T) -> Result<String, Error> {
+    serde_json::to_string(value).map_err(Error::UnexpectedData)
 }
 
 pub fn print_report(out: &mut impl Write, report: &Report) -> io::Result<()> {

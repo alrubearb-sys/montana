@@ -10,12 +10,21 @@ use crate::storage;
 // Nominatim allows one request per second at most.
 const REQUEST_INTERVAL_MS: u64 = 1100;
 
+pub fn all() -> Result<Vec<Area>, Error> {
+    let mut areas = storage::load_areas()?;
+    let boedele = boedele();
+    if areas.iter().all(|area| area.name != boedele.name) {
+        areas.push(boedele);
+    }
+    Ok(areas)
+}
+
 pub fn find(name: &str) -> Result<Area, Error> {
     let wanted = name.to_lowercase();
-    let saved = storage::load_areas()?
+    let found = all()?
         .into_iter()
         .find(|area| area.name.to_lowercase() == wanted);
-    match (saved, wanted.as_str()) {
+    match (found, wanted.as_str()) {
         (Some(area), _) => Ok(area),
         (None, "bodele" | "boedele" | "bödele") => Ok(boedele()),
         (None, _) => Err(Error::UnknownArea(name.to_string())),

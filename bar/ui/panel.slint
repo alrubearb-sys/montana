@@ -1,0 +1,266 @@
+import { Palette } from "std-widgets.slint";
+
+export struct Spot { label: string, height: string, sky: string, temperature: string, wind: string }
+export struct Day { name: string, sky: string, temperature: string, wind: string, sun: string, snow: string }
+export struct Tick { position: float, text: string }
+export struct Mark { position: float, text: string, midnight: bool }
+export enum Tone { line, snow, ice }
+export struct Legend { text: string, tone: Tone }
+export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick] }
+
+global Theme {
+    out property <color> background: rgb(26, 27, 38);
+    out property <color> chart: rgb(22, 22, 30);
+    out property <color> border: rgb(122, 162, 247);
+    out property <color> grid: rgb(59, 66, 97);
+    out property <color> dim: rgb(115, 122, 162);
+    out property <color> text: rgb(192, 202, 245);
+    out property <color> temperature: rgb(125, 207, 255);
+    out property <color> wind: rgb(158, 206, 106);
+    out property <color> snow: rgb(192, 202, 245);
+    out property <color> rain: rgb(122, 162, 247);
+    out property <color> sun: rgb(224, 175, 104);
+    out property <color> error: rgb(247, 118, 142);
+}
+
+component Label inherits Text {
+    color: Theme.dim;
+    font-size: 11px;
+}
+
+component Value inherits Text {
+    color: Theme.text;
+    font-size: 14px;
+}
+
+component Separator inherits Rectangle {
+    height: 1px;
+    background: Theme.grid;
+}
+
+component Link inherits Text {
+    callback clicked;
+    color: touch.has-hover ? Theme.border : Theme.dim;
+    font-size: 11px;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Plot inherits Rectangle {
+    in property <Chart> chart;
+    in property <[Mark]> marks;
+    in property <color> tint;
+    in property <int> hovered;
+    in property <int> hours;
+    in property <length> axis: 38px;
+    height: 94px;
+
+    HorizontalLayout {
+        x: 0; y: 0; height: 14px; spacing: 10px;
+        for part in chart.legend: Label { text: part.text; color: part.tone == Tone.snow ? Theme.snow : part.tone == Tone.ice ? Theme.error : root.tint; }
+        Rectangle { }
+    }
+
+    for tick in chart.ticks: Label {
+        x: 0;
+        y: plot.y + plot.height * tick.position - self.height / 2;
+        width: root.axis - 6px;
+        horizontal-alignment: right;
+        text: tick.text;
+    }
+
+    plot := Rectangle {
+        x: root.axis;
+        y: 20px;
+        width: parent.width - root.axis;
+        height: parent.height - 26px;
+        background: Theme.chart;
+
+        for tick in chart.ticks: Rectangle {
+            y: plot.height * tick.position;
+            width: 100%;
+            height: 1px;
+            background: Theme.grid;
+        }
+        for mark in marks: Rectangle {
+            x: plot.width * mark.position;
+            width: 1px;
+            height: 100%;
+            background: mark.midnight ? Theme.dim : Theme.grid;
+        }
+        if chart.rain != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.rain;
+            fill: Theme.rain;
+        }
+        if chart.snow != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.snow;
+            fill: Theme.snow;
+        }
+        if chart.ice != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.ice;
+            fill: Theme.error;
+        }
+        if chart.line != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.line;
+            stroke: root.tint;
+            stroke-width: 2px;
+        }
+        if root.hovered >= 0: Rectangle {
+            x: plot.width * (root.hovered + 0.5) / root.hours;
+            width: 1px;
+            height: 100%;
+            background: Theme.text;
+        }
+    }
+}
+
+export component Tray inherits SystemTrayIcon {
+    callback open <=> root.clicked;
+    title: "";
+    tooltip: "montana";
+    icon: Palette.color-scheme == ColorScheme.dark ? @image-url("mountain-white.svg") : @image-url("mountain-black.svg");
+}
+
+export component Panel inherits Window {
+    in property <string> area;
+    in property <string> daylight;
+    in property <string> problem;
+    in property <string> updated;
+    in property <string> snow-line;
+    in property <string> freezing-level;
+    in property <string> snow-depth;
+    in property <[Spot]> spots;
+    in property <[Day]> days;
+    in property <[Mark]> marks;
+    in property <Chart> temperature;
+    in property <Chart> wind;
+    in property <Chart> precipitation;
+    in property <[string]> readings;
+    in property <bool> several;
+    callback previous;
+    callback next;
+    callback refresh;
+    callback dismiss;
+    callback quit;
+    property <int> hours: readings.length;
+    property <int> hovered: -1;
+
+    // A few times per second is enough: every redraw costs battery.
+    Timer {
+        interval: 66ms;
+        running: pointer.has-hover;
+        triggered => {
+            root.hovered = min(root.hours - 1, max(0, floor((pointer.mouse-x / pointer.width) * root.hours)));
+        }
+    }
+
+    title: "montana";
+    icon: @image-url("mountain-white.svg");
+    width: 440px;
+    height: 748px;
+    no-frame: true;
+    always-on-top: true;
+    background: Theme.background;
+    default-font-family: "Menlo";
+    forward-focus: keys;
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape { root.dismiss(); return accept; }
+            if event.text == Key.LeftArrow { root.previous(); return accept; }
+            if event.text == Key.RightArrow { root.next(); return accept; }
+            return reject;
+        }
+    }
+
+    Rectangle {
+        border-width: 2px;
+        border-color: Theme.border;
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 9px;
+
+            HorizontalLayout {
+                spacing: 10px;
+                if root.several: Link { text: "<"; font-size: 16px; vertical-alignment: center; clicked => { root.previous(); } }
+                Text { text: root.area; color: Theme.border; font-size: 16px; overflow: elide; horizontal-stretch: 1; }
+                if root.several: Link { text: ">"; font-size: 16px; vertical-alignment: center; clicked => { root.next(); } }
+                Text { text: root.daylight; color: Theme.sun; font-size: 12px; vertical-alignment: center; }
+            }
+            Separator { }
+            if root.problem != "": Text { text: root.problem; color: Theme.error; font-size: 12px; wrap: word-wrap; }
+
+            for spot in root.spots: HorizontalLayout {
+                VerticalLayout { width: 92px; Label { text: spot.label; } Value { text: spot.height; } }
+                VerticalLayout { width: 124px; Label { text: "sky"; } Value { text: spot.sky; } }
+                VerticalLayout { width: 76px; Label { text: "temp"; } Value { text: spot.temperature; color: Theme.temperature; } }
+                VerticalLayout { Label { text: "wind"; } Value { text: spot.wind; color: Theme.wind; } }
+            }
+            HorizontalLayout {
+                VerticalLayout { width: 92px; Label { text: "snow line"; } Value { text: root.snow-line; } }
+                VerticalLayout { width: 124px; Label { text: "freezing level"; } Value { text: root.freezing-level; } }
+                VerticalLayout { Label { text: "snow depth"; } Value { text: root.snow-depth; } }
+            }
+            Separator { }
+
+            Label {
+                text: root.hovered >= 0 ? root.readings[root.hovered] : "next 48 h";
+                color: root.hovered >= 0 ? Theme.text : Theme.dim;
+            }
+            charts := Rectangle {
+                height: 306px;
+                Plot { y: 0; chart: root.temperature; marks: root.marks; tint: Theme.temperature; hovered: root.hovered; hours: root.hours; }
+                Plot { y: 96px; chart: root.wind; marks: root.marks; tint: Theme.wind; hovered: root.hovered; hours: root.hours; }
+                Plot { y: 192px; chart: root.precipitation; marks: root.marks; tint: Theme.rain; hovered: root.hovered; hours: root.hours; }
+                for mark in root.marks: Label {
+                    x: 38px + (parent.width - 38px) * mark.position - self.width / 2;
+                    y: 288px;
+                    text: mark.text;
+                    color: mark.midnight ? Theme.text : Theme.dim;
+                }
+                pointer := TouchArea {
+                    x: 38px;
+                    width: parent.width - 38px;
+                    height: 100%;
+                    changed has-hover => { if !self.has-hover { root.hovered = -1; } }
+                }
+            }
+            Separator { }
+
+            HorizontalLayout {
+                Label { width: 44px; text: "day"; } Label { width: 104px; text: "sky"; } Label { width: 78px; text: "temp °C"; }
+                Label { width: 66px; text: "wind max"; } Label { width: 56px; text: "sun"; } Label { text: "snow"; horizontal-alignment: right; }
+            }
+            VerticalLayout {
+                spacing: 4px;
+                for day in root.days: HorizontalLayout {
+                    Text { width: 44px; text: day.name; color: Theme.text; font-size: 12px; }
+                    Text { width: 104px; text: day.sky; color: Theme.text; font-size: 12px; overflow: elide; }
+                    Text { width: 78px; text: day.temperature; color: Theme.temperature; font-size: 12px; }
+                    Text { width: 66px; text: day.wind; color: Theme.wind; font-size: 12px; }
+                    Text { width: 56px; text: day.sun; color: Theme.sun; font-size: 12px; }
+                    Text { text: day.snow; color: Theme.snow; font-size: 12px; horizontal-alignment: right; }
+                }
+            }
+            Rectangle { vertical-stretch: 1; }
+            HorizontalLayout {
+                spacing: 12px;
+                Label { text: root.updated; horizontal-stretch: 1; }
+                Link { text: "refresh"; clicked => { root.refresh(); } }
+                Link { text: "quit"; clicked => { root.quit(); } }
+            }
+            Label { text: "Weather data by Open-Meteo (CC BY 4.0). Made with Slint."; font-size: 10px; }
+        }
+    }
+}

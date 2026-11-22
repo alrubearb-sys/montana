@@ -100,16 +100,20 @@ luz, probabilidad de tormenta, riesgo de aludes.
 - `ranking`: puntuación de zonas según mis criterios.
 - `output`: CLI con clap y salida JSON. Es el motor común: los paneles solo pintan ese JSON.
 - Panel de Omarchy: plugin QML (`bar-widget` con panel) que corre dentro del shell y llama al motor.
-- Panel del Mac: app nativa en Rust, sin navegador. Candidata: Slint, que hay que medir antes.
+- Panel del Mac: `bar/` (`montana-bar`), app nativa con Slint dibujando con la CPU. Ejecuta `montana`
+  para pedir los datos y crea la ventana solo mientras está abierta. Medido el 2026-11-22 (footprint):
+  15 MB al arrancar, 38 abierto, de 23 a 33 al cerrar, y 0 CPU y 0 despertares cerrado. Cada redibujo
+  pinta el panel entero, así que hay que redibujar lo menos posible. egui daba 37 cerrado y hasta 53 abierto.
+  La licencia gratuita de Slint pide citarlo. En el Mac, comprobar con `--workspace`.
 
 ## Fases
 
 1. CLI que busca un sitio, lo guarda y devuelve su pronóstico, también en JSON.
-2. Plugin de Omarchy: botón en la barra y panel con datos y gráfica.
+2. App de barra para el Mac (va primero porque Alejandro trabaja ahí): icono, y un clic abre el panel.
 3. Ranking comparando varias zonas.
-4. Mapa para marcar zonas: clic izquierdo la cima y clic derecho la base (opcional). Se abre solo para
+4. Plugin de Omarchy con el mismo panel: botón en la barra, datos y gráfica.
+5. Mapa para marcar zonas: clic izquierdo la cima y clic derecho la base (opcional). Se abre solo para
    añadir y se cierra. Nativo en Rust (candidata: `walkers`), midiendo la RAM.
-5. App de barra para el Mac con el mismo panel y el look de Omarchy.
 
 ## Notas del sistema
 

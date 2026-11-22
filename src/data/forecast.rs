@@ -180,8 +180,10 @@ fn sky(code: u8) -> Result<Sky, Error> {
         0 | 1 => Ok(Sky::Clear),
         2 | 3 => Ok(Sky::Cloudy),
         45 | 48 => Ok(Sky::Fog),
-        51 | 53 | 55 | 56 | 57 => Ok(Sky::Drizzle),
-        61 | 63 | 65 | 66 | 67 => Ok(Sky::Rain),
+        51 | 53 | 55 => Ok(Sky::Drizzle),
+        56 | 57 => Ok(Sky::FreezingDrizzle),
+        61 | 63 | 65 => Ok(Sky::Rain),
+        66 | 67 => Ok(Sky::FreezingRain),
         71 | 73 | 75 | 77 => Ok(Sky::Snow),
         80..=82 => Ok(Sky::RainShowers),
         85 | 86 => Ok(Sky::SnowShowers),
@@ -278,5 +280,7 @@ mod tests {
     fn rejects_unknown_weather_code() {
         assert!(matches!(sky(4), Err(Error::UnknownWeatherCode(4))));
         assert_eq!(sky(99).unwrap(), Sky::Thunderstorm);
+        assert_eq!(sky(57).unwrap(), Sky::FreezingDrizzle);
+        assert_eq!(sky(66).unwrap(), Sky::FreezingRain);
     }
 }

@@ -49,6 +49,12 @@ enum Command {
         #[arg(long)]
         name: Option<String>,
     },
+    /// List the areas
+    Areas {
+        /// Print the names as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -67,6 +73,7 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
     match (cli.command, cli.area) {
         (Some(Command::Search { text }), _) => search(out, &text),
         (Some(Command::Add { text, result, name }), _) => add(out, &text, result, name),
+        (Some(Command::Areas { json }), _) => list(out, json),
         (None, Some(area)) if cli.json => show_json(out, &area),
         (None, Some(area)) => show(out, &area),
         (None, None) => Ok(()),
@@ -90,6 +97,18 @@ fn add(out: &mut impl Write, text: &str, chosen: usize, name: Option<String>) ->
     writeln!(out, "Saved: {}", area.name)?;
     output::print_point(out, "Summit", area.summit)?;
     writeln!(out, "Elevation from {}", output::credit(source))?;
+    Ok(())
+}
+
+fn list(out: &mut impl Write, json: bool) -> Result<(), Error> {
+    let names: Vec<String> = areas::all()?.into_iter().map(|area| area.name).collect();
+    if json {
+        writeln!(out, "{}", output::to_json(&names)?)?;
+    } else {
+        for name in names {
+            writeln!(out, "{name}")?;
+        }
+    }
     Ok(())
 }
 
