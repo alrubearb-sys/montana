@@ -1,27 +1,32 @@
+mod areas;
 mod model;
 
-use crate::model::{Area, Meters, Point};
+use std::process::ExitCode;
 
-fn main() {
-    let boedele = Area {
-        name: String::from("Bödele ski resort"),
-        base: Point {
-            latitude: 47.4178,
-            longitude: 9.8182,
-            elevation: Meters(1088.0),
-        },
-        summit: Point {
-            latitude: 47.4031,
-            longitude: 9.8132,
-            elevation: Meters(1448.0),
-        },
+use clap::Parser;
+
+/// Should I go to the mountains?
+#[derive(Parser)]
+#[command(version)]
+struct Cli {
+    /// Area to check, for example "bodele"
+    area: String,
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+
+    let Some(area) = areas::find(&cli.area) else {
+        eprintln!("Unknown area: {}", cli.area);
+        return ExitCode::FAILURE;
     };
 
-    println!("{}", boedele.name);
-    for (label, point) in [("Base", boedele.base), ("Summit", boedele.summit)] {
+    println!("{}", area.name);
+    for (label, point) in [("Base", area.base), ("Summit", area.summit)] {
         println!(
             "{label}: {} m ({}, {})",
             point.elevation.0, point.latitude, point.longitude
         );
     }
+    ExitCode::SUCCESS
 }
