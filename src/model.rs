@@ -26,32 +26,25 @@ pub enum Mode {
     Mountain,
 }
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Celsius(pub f64);
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Millimeters(pub f64);
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Centimeters(pub f64);
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct KilometersPerHour(pub f64);
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Percent(pub u8);
 
 /// Seconds since 1 January 1970 UTC.
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnixTime(pub i64);
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sky {
     Clear,
@@ -65,7 +58,6 @@ pub enum Sky {
     Thunderstorm,
 }
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct HourlyForecast {
     pub time: UnixTime,
@@ -84,17 +76,16 @@ pub struct HourlyForecast {
     pub precipitation_probability: Option<Percent>,
 }
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Daylight {
     pub sunrise: UnixTime,
     pub sunset: UnixTime,
 }
 
-#[expect(dead_code, reason = "filled in when the forecast is fetched")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Forecast {
     pub point: Point,
+    pub utc_offset_seconds: i32,
     pub hours: Vec<HourlyForecast>,
     pub days: Vec<Daylight>,
 }

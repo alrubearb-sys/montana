@@ -1,4 +1,5 @@
 pub mod elevation;
+pub mod forecast;
 pub mod search;
 
 use std::time::Duration;

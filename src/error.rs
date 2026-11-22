@@ -7,6 +7,7 @@ pub enum Error {
     BadCoordinates(String),
     BadFile(PathBuf, serde_json::Error),
     File(PathBuf, std::io::Error),
+    MissingData(&'static str),
     MissingHome,
     Network(Box<ureq::Error>),
     NoElevation,
@@ -14,6 +15,7 @@ pub enum Error {
     ResultOutOfRange { chosen: usize, available: usize },
     UnexpectedData(serde_json::Error),
     UnknownArea(String),
+    UnknownWeatherCode(u8),
 }
 
 impl fmt::Display for Error {
@@ -23,6 +25,7 @@ impl fmt::Display for Error {
             Error::BadCoordinates(text) => write!(f, "cannot read the coordinates: {text}"),
             Error::BadFile(path, source) => write!(f, "cannot read {}: {source}", path.display()),
             Error::File(path, source) => write!(f, "cannot access {}: {source}", path.display()),
+            Error::MissingData(name) => write!(f, "the forecast has no {name}"),
             Error::MissingHome => write!(f, "the HOME variable is not set"),
             Error::Network(source) => write!(f, "the request failed: {source}"),
             Error::NoElevation => write!(f, "no elevation found for this place"),
@@ -35,6 +38,7 @@ impl fmt::Display for Error {
                 f,
                 "unknown area: {name}. Add it with: montana add \"{name}\""
             ),
+            Error::UnknownWeatherCode(code) => write!(f, "unknown weather code: {code}"),
         }
     }
 }
@@ -47,11 +51,13 @@ impl std::error::Error for Error {
             Error::Network(source) => Some(source),
             Error::AlreadySaved(_)
             | Error::BadCoordinates(_)
+            | Error::MissingData(_)
             | Error::MissingHome
             | Error::NoElevation
             | Error::NoResults(_)
             | Error::ResultOutOfRange { .. }
-            | Error::UnknownArea(_) => None,
+            | Error::UnknownArea(_)
+            | Error::UnknownWeatherCode(_) => None,
         }
     }
 }
