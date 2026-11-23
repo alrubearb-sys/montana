@@ -6,6 +6,10 @@ use crate::model::Meters;
 
 // Left, top, right and bottom of Europe, in degrees.
 const EUROPE: &str = "-11,71.5,40,34";
+// Nominatim ranks places by size: 4 a country, 8 a state or canton, 12 a district,
+// 16 a city, 18 a peak. Up to districts, the point is only the middle of a large
+// area: the canton of St. Gallen gives a mountain at 2010 m.
+const SMALLEST_REGION_RANK: u8 = 12;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Place {
@@ -25,6 +29,10 @@ struct NominatimPlace {
     name: String,
     #[serde(rename = "type")]
     kind: String,
+    // What the place is ("city", "peak", "postcode"), clearer than `type`.
+    #[serde(default)]
+    addresstype: String,
+    place_rank: u8,
     display_name: String,
     #[serde(default)]
     address: Address,
@@ -58,7 +66,11 @@ pub fn request(url: &str, text: &str) -> Result<Vec<Place>, Error> {
 
 fn parse(json: &str) -> Result<Vec<Place>, Error> {
     let places: Vec<NominatimPlace> = serde_json::from_str(json).map_err(Error::UnexpectedData)?;
-    places.into_iter().map(to_place).collect()
+    places
+        .into_iter()
+        .filter(|place| place.place_rank > SMALLEST_REGION_RANK)
+        .map(to_place)
+        .collect()
 }
 
 fn to_place(place: NominatimPlace) -> Result<Place, Error> {
@@ -70,7 +82,11 @@ fn to_place(place: NominatimPlace) -> Result<Place, Error> {
             .and_then(|tags| tags.ele)
             .and_then(|text| parse_elevation(&text)),
         name: name_or_start(place.name, &place.display_name),
-        kind: place.kind,
+        kind: if place.addresstype.is_empty() {
+            place.kind
+        } else {
+            place.addresstype
+        },
         description: place.display_name,
         country_code: place.address.country_code,
     })
@@ -122,6 +138,17 @@ mod tests {
 
         assert_eq!(places[0].elevation, Some(Meters(2502.0)));
         assert_eq!(places[2].elevation, None);
+    }
+
+    #[test]
+    fn leaves_out_whole_regions() {
+        let places = parse(include_str!("../../tests/data/nominatim_st_gallen.json")).unwrap();
+
+        let found: Vec<_> = places
+            .iter()
+            .map(|place| (place.name.as_str(), place.kind.as_str()))
+            .collect();
+        assert_eq!(found, [("St. Gallen", "city"), ("Sankt Gallen", "village")]);
     }
 
     #[test]

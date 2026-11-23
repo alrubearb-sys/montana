@@ -23,6 +23,7 @@ pub struct Forecast {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Place {
     pub name: String,
+    pub kind: String,
     pub description: String,
     pub elevation: Option<f64>,
 }

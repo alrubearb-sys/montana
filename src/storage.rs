@@ -43,12 +43,16 @@ pub fn save_areas(areas: &[Area]) -> Result<(), Error> {
     save(&config_dir()?.join("areas.json"), areas)
 }
 
+// Renamed from search.json when regions started to be left out, so that answers
+// saved before are asked again.
+const CACHE_FILE: &str = "places.json";
+
 pub fn load_cache() -> Result<SearchCache, Error> {
-    load(&cache_dir()?.join("search.json"))
+    load(&cache_dir()?.join(CACHE_FILE))
 }
 
 pub fn save_cache(cache: &SearchCache) -> Result<(), Error> {
-    save(&cache_dir()?.join("search.json"), cache)
+    save(&cache_dir()?.join(CACHE_FILE), cache)
 }
 
 fn config_dir() -> Result<PathBuf, Error> {

@@ -90,16 +90,17 @@ pub fn choices(areas: &[String], matches: &[usize], found: &[Place]) -> Vec<Choi
     saved.chain(found).collect()
 }
 
-// "2502 m · Schwende-Rüte, Appenzell Innerrhoden, Switzerland": the description
-// starts with the name, which the row already shows.
+// "peak · 2502 m · Schwende-Rüte, Switzerland": what it is tells apart places with
+// the same name. The description starts with the name, which the row already shows.
 fn place_detail(place: &Place) -> String {
+    let kind = place.kind.replace('_', " ");
     let region = place
         .description
         .split_once(", ")
         .map_or(place.description.as_str(), |(_, rest)| rest);
     match place.elevation {
-        Some(elevation) => format!("{} m · {region}", whole(elevation)),
-        None => region.to_string(),
+        Some(elevation) => format!("{kind} · {} m · {region}", whole(elevation)),
+        None => format!("{kind} · {region}"),
     }
 }
 
@@ -497,15 +498,19 @@ mod tests {
     fn found_places_show_elevation_and_region() {
         let place = |elevation| Place {
             name: String::from("Säntis"),
+            kind: String::from("peak"),
             description: String::from("Säntis, Schwende-Rüte, Switzerland"),
             elevation,
         };
 
         assert_eq!(
             place_detail(&place(Some(2502.0))),
-            "2502 m · Schwende-Rüte, Switzerland"
+            "peak · 2502 m · Schwende-Rüte, Switzerland"
         );
-        assert_eq!(place_detail(&place(None)), "Schwende-Rüte, Switzerland");
+        assert_eq!(
+            place_detail(&place(None)),
+            "peak · Schwende-Rüte, Switzerland"
+        );
     }
 
     #[test]
