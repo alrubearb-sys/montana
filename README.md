@@ -47,3 +47,6 @@ cargo run
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT)
 at your option.
+
+The Mac panel embeds [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono), the font Omarchy uses,
+under the [SIL Open Font License 1.1](bar/ui/fonts/OFL.txt).

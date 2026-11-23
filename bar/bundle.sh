@@ -10,7 +10,7 @@ cargo build --release --workspace
 rm -rf "$new"
 mkdir -p "$new/Contents/MacOS" "$new/Contents/Resources"
 cp target/release/montana target/release/montana-bar "$new/Contents/MacOS/"
-cp bar/ui/montana.icns "$new/Contents/Resources/"
+cp bar/ui/montana.icns bar/ui/fonts/OFL.txt "$new/Contents/Resources/"
 cat > "$new/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

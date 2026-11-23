@@ -34,22 +34,23 @@ pub fn build(report: &Report, now: i64) -> View {
         .take(CHART_HOURS)
         .collect();
 
-    let mut spots = vec![spot("summit", summit, now)];
-    spots.extend(report.base.as_ref().map(|base| spot("base", base, now)));
+    let mut now_spots = vec![spot("summit", summit, now)];
+    now_spots.extend(report.base.as_ref().map(|base| spot("base", base, now)));
+    let totals: Vec<Totals> = summit
+        .hours
+        .chunk_by(|a, b| clock::day(a.time, offset) == clock::day(b.time, offset))
+        .map(|hours| totals(hours, &summit.days, offset))
+        .collect();
 
     View {
         daylight: daylight(summit, now),
         snow_line: meters(current.and_then(|hour| hour.snow_line_m)),
         freezing_level: meters(current.map(|hour| hour.freezing_level_m)),
         snow_depth: current.map_or(dash(), |hour| {
-            format!("{:.0} cm", hour.snow_depth_m * 100.0)
+            format!("{} cm", whole(hour.snow_depth_m * 100.0))
         }),
-        spots,
-        days: summit
-            .hours
-            .chunk_by(|a, b| clock::day(a.time, offset) == clock::day(b.time, offset))
-            .map(|hours| day(hours, &summit.days, offset))
-            .collect(),
+        spots: spots(&now_spots),
+        days: days(&totals),
         marks: marks(&hours, offset),
         temperature: temperature_chart(&hours),
         wind: wind_chart(&hours),
@@ -69,19 +70,40 @@ fn current_hour(hours: &[Hour], now: i64) -> Option<&Hour> {
     hours.iter().rfind(|hour| hour.time <= now)
 }
 
-fn spot(label: &str, forecast: &Forecast, now: i64) -> Spot {
+// What one spot shows now, before the columns are lined up.
+struct Now {
+    label: &'static str,
+    height: String,
+    sky: &'static str,
+    temperature: String,
+    wind: String,
+}
+
+fn spot(label: &'static str, forecast: &Forecast, now: i64) -> Now {
     let hour = current_hour(&forecast.hours, now);
-    Spot {
-        label: label.into(),
-        height: format!("{:.0} m", forecast.point.elevation).into(),
-        sky: hour.map_or("-", sky_label).into(),
-        temperature: hour
-            .map_or(dash(), |hour| format!("{} °C", whole(hour.temperature_c)))
-            .into(),
-        wind: hour
-            .map_or(dash(), |hour| format!("{} km/h", whole(hour.best_wind())))
-            .into(),
+    Now {
+        label,
+        height: whole(forecast.point.elevation),
+        sky: hour.map_or("-", sky_label),
+        temperature: hour.map_or(dash(), |hour| whole(hour.temperature_c)),
+        wind: hour.map_or(dash(), |hour| whole(hour.best_wind())),
     }
+}
+
+fn spots(readings: &[Now]) -> Vec<Spot> {
+    let height = width(readings.iter().map(|now| now.height.as_str()));
+    let temperature = width(readings.iter().map(|now| now.temperature.as_str()));
+    let wind = width(readings.iter().map(|now| now.wind.as_str()));
+    readings
+        .iter()
+        .map(|now| Spot {
+            label: now.label.into(),
+            height: format!("{:>height$} m", now.height).into(),
+            sky: now.sky.into(),
+            temperature: format!("{:>temperature$} °C", now.temperature).into(),
+            wind: format!("{:>wind$} km/h", now.wind).into(),
+        })
+        .collect()
 }
 
 fn daylight(forecast: &Forecast, now: i64) -> String {
@@ -102,7 +124,18 @@ fn daylight(forecast: &Forecast, now: i64) -> String {
         })
 }
 
-fn day(hours: &[Hour], days: &[Daylight], offset: i64) -> Day {
+// One day of the table, before the columns are lined up.
+struct Totals {
+    name: &'static str,
+    sky: &'static str,
+    low: String,
+    high: String,
+    wind: String,
+    sun: String,
+    snow: String,
+}
+
+fn totals(hours: &[Hour], days: &[Daylight], offset: i64) -> Totals {
     let start = hours.first().map_or(0, |hour| hour.time);
     let light = days
         .iter()
@@ -118,14 +151,40 @@ fn day(hours: &[Hour], days: &[Daylight], offset: i64) -> Day {
     let wind = hours.iter().map(Hour::best_wind).fold(0.0, f64::max);
     let sun: f64 = hours.iter().map(|hour| hour.sunshine_minutes).sum();
     let snow: f64 = hours.iter().map(|hour| hour.fresh_snow_cm).sum();
-    Day {
-        name: clock::weekday(start, offset).into(),
-        sky: day_sky(hours, light).into(),
-        temperature: format!("{} / {}", whole(low), whole(high)).into(),
-        wind: format!("{} km/h", whole(wind)).into(),
-        sun: format!("{:.1} h", sun / 60.0).into(),
-        snow: format!("{} cm", whole(snow)).into(),
+    Totals {
+        name: clock::weekday(start, offset),
+        sky: day_sky(hours, light),
+        low: whole(low),
+        high: whole(high),
+        wind: whole(wind),
+        sun: format!("{:.1}", sun / 60.0),
+        snow: whole(snow),
     }
+}
+
+fn days(totals: &[Totals]) -> Vec<Day> {
+    let low = width(totals.iter().map(|day| day.low.as_str()));
+    let high = width(totals.iter().map(|day| day.high.as_str()));
+    let wind = width(totals.iter().map(|day| day.wind.as_str()));
+    let sun = width(totals.iter().map(|day| day.sun.as_str()));
+    let snow = width(totals.iter().map(|day| day.snow.as_str()));
+    totals
+        .iter()
+        .map(|day| Day {
+            name: day.name.into(),
+            sky: day.sky.into(),
+            temperature: format!("{:>low$} / {:>high$}", day.low, day.high).into(),
+            wind: format!("{:>wind$} km/h", day.wind).into(),
+            sun: format!("{:>sun$} h", day.sun).into(),
+            snow: format!("{:>snow$} cm", day.snow).into(),
+        })
+        .collect()
+}
+
+// The panel font is monospaced: padding each number in a column to the longest one
+// lines up the last digits and the units, whatever the sign.
+fn width<'a>(texts: impl Iterator<Item = &'a str>) -> usize {
+    texts.map(|text| text.chars().count()).max().unwrap_or(0)
 }
 
 fn sky_label(hour: &Hour) -> &'static str {
@@ -381,6 +440,26 @@ mod tests {
         assert!(view.precipitation.rain.is_empty());
         assert!(!view.precipitation.snow.is_empty());
         assert_eq!(view.temperature.ticks.row_count(), 2);
+    }
+
+    #[test]
+    fn columns_line_up_whatever_the_sign() {
+        let day = |low: &str, high: &str, wind: &str| Totals {
+            name: "Mon",
+            sky: "snow",
+            low: low.into(),
+            high: high.into(),
+            wind: wind.into(),
+            sun: "0.0".into(),
+            snow: "0".into(),
+        };
+
+        let days = days(&[day("-4", "-2", "19"), day("-3", "1", "9")]);
+
+        assert_eq!(days[0].temperature, "-4 / -2");
+        assert_eq!(days[1].temperature, "-3 /  1");
+        assert_eq!(days[0].wind, "19 km/h");
+        assert_eq!(days[1].wind, " 9 km/h");
     }
 
     #[test]

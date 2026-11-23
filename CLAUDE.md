@@ -112,13 +112,16 @@ luz, probabilidad de tormenta, riesgo de aludes.
 2. App de barra para el Mac (va primero porque Alejandro trabaja ahí): icono, y un clic abre el panel.
 3. Ranking comparando varias zonas.
 4. Plugin de Omarchy con el mismo panel: botón en la barra, datos y gráfica.
-5. Mapa para marcar zonas: clic izquierdo la cima y clic derecho la base (opcional). Se abre solo para
-   añadir y se cierra. Nativo en Rust (candidata: `walkers`), midiendo la RAM.
+5. Añadir zonas en dos niveles, para usar el mapa lo menos posible. Primero una lupa en el panel que
+   busca una localidad y da una lista. Si hace falta más precisión (cima, base, una pista o un punto
+   concreto), se abre el mapa: clic izquierdo la cima y clic derecho la base (opcional). El mapa es un
+   programa aparte que se abre solo para eso y termina al cerrarlo. Nativo en Rust (candidata:
+   `walkers`), midiendo la RAM.
 
 ## Notas del sistema
 
 - La barra ya no es Waybar: Omarchy la cambió por su propio shell (Quickshell) con plugins. La
-  fase 2 es un plugin de Omarchy (ver la skill `omarchy`, guía `plugins.md`), no un módulo de Waybar.
+  fase 4 es un plugin de Omarchy (ver la skill `omarchy`, guía `plugins.md`), no un módulo de Waybar.
 - La carpeta está en MEGA. `.megaignore` excluye `target/` para no sincronizar lo compilado; `.git`
   tampoco se sincroniza (lo excluye el `.megaignore` general).
 - Repositorio público: https://github.com/alrubearb-sys/montana (licencia MIT o Apache 2.0). El
@@ -132,5 +135,4 @@ luz, probabilidad de tormenta, riesgo de aludes.
 
 ## Pendiente de decidir
 
-- Qué datos mostrar en la barra (Alejandro se fija durante un par de semanas en qué mira antes de salir).
 - Lista de zonas favoritas y criterios del ranking.

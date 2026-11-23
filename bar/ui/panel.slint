@@ -1,4 +1,6 @@
 import { Palette } from "std-widgets.slint";
+// Omarchy's system font, embedded so the panel looks the same on a Mac without it.
+import "fonts/JetBrainsMono-Regular.ttf";
 
 export struct Spot { label: string, height: string, sky: string, temperature: string, wind: string }
 export struct Day { name: string, sky: string, temperature: string, wind: string, sun: string, snow: string }
@@ -8,29 +10,60 @@ export enum Tone { line, snow, ice }
 export struct Legend { text: string, tone: Tone }
 export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick] }
 
+// Omarchy's palette roles (themes/tokyo-night/colors.toml), so a later version can read
+// the active Omarchy theme instead of these values.
+global Omarchy {
+    out property <color> accent: #7aa2f7;
+    out property <color> muted: #414868;
+    out property <color> background: #1a1b26;
+    out property <color> dark-background: #13141c;
+    out property <color> foreground: #a9b1d6;
+    out property <color> dark-foreground: #565f89;
+    out property <color> bright-foreground: #c0caf5;
+    out property <color> red: #f7768e;
+    out property <color> yellow: #e0af68;
+    out property <color> green: #9ece6a;
+    out property <color> blue: #7aa2f7;
+    out property <color> bright-cyan: #0db9d7;
+}
+
+// Omarchy's type scale and spacing at the default base size of 12 (shell/Commons/Style.qml).
+global Style {
+    out property <length> caption: 10px;
+    out property <length> body-small: 11px;
+    out property <length> body: 12px;
+    out property <length> title: 14px;
+    out property <length> heading: 16px;
+    out property <length> panel-padding: 18px;
+    out property <length> row-gap: 8px;
+    out property <length> label-gap: 4px;
+    out property <length> control-padding-x: 10px;
+    out property <length> control-padding-y: 6px;
+}
+
 global Theme {
-    out property <color> background: rgb(26, 27, 38);
-    out property <color> chart: rgb(22, 22, 30);
-    out property <color> border: rgb(122, 162, 247);
-    out property <color> grid: rgb(59, 66, 97);
-    out property <color> dim: rgb(115, 122, 162);
-    out property <color> text: rgb(192, 202, 245);
-    out property <color> temperature: rgb(125, 207, 255);
-    out property <color> wind: rgb(158, 206, 106);
-    out property <color> snow: rgb(192, 202, 245);
-    out property <color> rain: rgb(122, 162, 247);
-    out property <color> sun: rgb(224, 175, 104);
-    out property <color> error: rgb(247, 118, 142);
+    out property <color> background: Omarchy.background;
+    out property <color> chart: Omarchy.dark-background;
+    out property <color> border: Omarchy.accent;
+    out property <color> grid: Omarchy.muted;
+    out property <color> dim: Omarchy.dark-foreground;
+    out property <color> text: Omarchy.foreground;
+    out property <color> temperature: Omarchy.bright-cyan;
+    out property <color> wind: Omarchy.green;
+    out property <color> snow: Omarchy.bright-foreground;
+    out property <color> rain: Omarchy.blue;
+    out property <color> sun: Omarchy.yellow;
+    out property <color> error: Omarchy.red;
 }
 
 component Label inherits Text {
     color: Theme.dim;
-    font-size: 11px;
+    font-size: Style.body-small;
 }
 
 component Value inherits Text {
     color: Theme.text;
-    font-size: 14px;
+    font-size: Style.title;
 }
 
 component Separator inherits Rectangle {
@@ -38,10 +71,21 @@ component Separator inherits Rectangle {
     background: Theme.grid;
 }
 
-component Link inherits Text {
+// Omarchy's [controls] chrome: a 1 px foreground border at 40 %, a faint fill, and
+// stronger fills on hover and press. Corners stay square, as in Omarchy's default.
+component Button inherits Rectangle {
+    in property <string> text;
     callback clicked;
-    color: touch.has-hover ? Theme.border : Theme.dim;
-    font-size: 11px;
+    background: Theme.text.with-alpha(touch.pressed ? 0.22 : touch.has-hover ? 0.08 : 0.04);
+    border-width: 1px;
+    border-color: Theme.text.with-alpha(touch.has-hover ? 0.25 : 0.4);
+    HorizontalLayout {
+        padding-left: Style.control-padding-x;
+        padding-right: Style.control-padding-x;
+        padding-top: Style.control-padding-y;
+        padding-bottom: Style.control-padding-y;
+        Text { text: root.text; color: Theme.text; font-size: Style.body; vertical-alignment: center; horizontal-alignment: center; }
+    }
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
@@ -171,7 +215,7 @@ export component Panel inherits Window {
     no-frame: true;
     always-on-top: true;
     background: Theme.background;
-    default-font-family: "Menlo";
+    default-font-family: "JetBrains Mono";
     forward-focus: keys;
 
     keys := FocusScope {
@@ -188,18 +232,18 @@ export component Panel inherits Window {
         border-color: Theme.border;
 
         VerticalLayout {
-            padding: 16px;
-            spacing: 9px;
+            padding: Style.panel-padding;
+            spacing: Style.row-gap;
 
             HorizontalLayout {
-                spacing: 10px;
-                if root.several: Link { text: "<"; font-size: 16px; vertical-alignment: center; clicked => { root.previous(); } }
-                Text { text: root.area; color: Theme.border; font-size: 16px; overflow: elide; horizontal-stretch: 1; }
-                if root.several: Link { text: ">"; font-size: 16px; vertical-alignment: center; clicked => { root.next(); } }
-                Text { text: root.daylight; color: Theme.sun; font-size: 12px; vertical-alignment: center; }
+                spacing: Style.row-gap;
+                if root.several: Button { text: "<"; clicked => { root.previous(); } }
+                Text { text: root.area; color: Theme.border; font-size: Style.heading; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                if root.several: Button { text: ">"; clicked => { root.next(); } }
+                Text { text: root.daylight; color: Theme.sun; font-size: Style.body; vertical-alignment: center; }
             }
             Separator { }
-            if root.problem != "": Text { text: root.problem; color: Theme.error; font-size: 12px; wrap: word-wrap; }
+            if root.problem != "": Text { text: root.problem; color: Theme.error; font-size: Style.body; wrap: word-wrap; }
 
             for spot in root.spots: HorizontalLayout {
                 VerticalLayout { width: 92px; Label { text: spot.label; } Value { text: spot.height; } }
@@ -243,24 +287,24 @@ export component Panel inherits Window {
                 Label { width: 66px; text: "wind max"; } Label { width: 56px; text: "sun"; } Label { text: "snow"; horizontal-alignment: right; }
             }
             VerticalLayout {
-                spacing: 4px;
+                spacing: Style.label-gap;
                 for day in root.days: HorizontalLayout {
-                    Text { width: 44px; text: day.name; color: Theme.text; font-size: 12px; }
-                    Text { width: 104px; text: day.sky; color: Theme.text; font-size: 12px; overflow: elide; }
-                    Text { width: 78px; text: day.temperature; color: Theme.temperature; font-size: 12px; }
-                    Text { width: 66px; text: day.wind; color: Theme.wind; font-size: 12px; }
-                    Text { width: 56px; text: day.sun; color: Theme.sun; font-size: 12px; }
-                    Text { text: day.snow; color: Theme.snow; font-size: 12px; horizontal-alignment: right; }
+                    Text { width: 44px; text: day.name; color: Theme.text; font-size: Style.body; }
+                    Text { width: 104px; text: day.sky; color: Theme.text; font-size: Style.body; overflow: elide; }
+                    Text { width: 78px; text: day.temperature; color: Theme.temperature; font-size: Style.body; }
+                    Text { width: 66px; text: day.wind; color: Theme.wind; font-size: Style.body; }
+                    Text { width: 56px; text: day.sun; color: Theme.sun; font-size: Style.body; }
+                    Text { text: day.snow; color: Theme.snow; font-size: Style.body; horizontal-alignment: right; }
                 }
             }
             Rectangle { vertical-stretch: 1; }
             HorizontalLayout {
-                spacing: 12px;
-                Label { text: root.updated; horizontal-stretch: 1; }
-                Link { text: "refresh"; clicked => { root.refresh(); } }
-                Link { text: "quit"; clicked => { root.quit(); } }
+                spacing: Style.row-gap;
+                Label { text: root.updated; vertical-alignment: center; horizontal-stretch: 1; }
+                Button { text: "refresh"; clicked => { root.refresh(); } }
+                Button { text: "quit"; clicked => { root.quit(); } }
             }
-            Label { text: "Weather data by Open-Meteo (CC BY 4.0). Made with Slint."; font-size: 10px; }
+            Label { text: "Weather data by Open-Meteo (CC BY 4.0). Made with Slint."; font-size: Style.caption; }
         }
     }
 }
