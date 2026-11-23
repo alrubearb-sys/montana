@@ -6,20 +6,80 @@ use std::process::Command;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
+/// The panel of an area, worked out by the engine: everything comes ready to show,
+/// so the panels of the Mac and of Omarchy only draw it.
 #[derive(Debug, Clone, Deserialize)]
-pub struct Report {
-    #[serde(default)]
-    pub kind: Option<String>,
-    pub summit: Forecast,
-    pub base: Option<Forecast>,
+pub struct Panel {
+    pub utc_offset_seconds: i64,
+    pub daylight: String,
+    pub snow_line: String,
+    pub freezing_level: String,
+    pub snow_depth: String,
+    pub spots: Vec<Spot>,
+    pub days: Vec<Day>,
+    pub marks: Vec<Mark>,
+    pub temperature: Chart,
+    pub wind: Chart,
+    pub precipitation: Chart,
+    pub readings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Forecast {
-    pub point: Point,
-    pub utc_offset_seconds: i64,
-    pub hours: Vec<Hour>,
-    pub days: Vec<Daylight>,
+pub struct Spot {
+    pub label: String,
+    pub height: String,
+    pub sky: String,
+    pub temperature: String,
+    pub wind: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Day {
+    pub name: String,
+    pub sky: String,
+    pub temperature: String,
+    pub wind: String,
+    pub sun: String,
+    pub snow: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Mark {
+    pub position: f32,
+    pub text: String,
+    pub midnight: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Chart {
+    pub legend: Vec<Legend>,
+    pub line: String,
+    pub snow: String,
+    pub rain: String,
+    pub ice: String,
+    pub ticks: Vec<Tick>,
+    /// Where 0 °C is, from the top; only in the temperature chart.
+    pub zero: Option<f32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Legend {
+    pub text: String,
+    pub tone: Tone,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Tone {
+    Line,
+    Snow,
+    Ice,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Tick {
+    pub position: f32,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -46,103 +106,6 @@ struct SearchResults {
 pub struct Point {
     pub latitude: f64,
     pub longitude: f64,
-    pub elevation: f64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct Hour {
-    pub time: i64,
-    pub sky: Sky,
-    pub temperature_c: f64,
-    pub precipitation_mm: f64,
-    pub fresh_snow_cm: f64,
-    pub snow_depth_m: f64,
-    pub wind_kmh: f64,
-    pub high_wind_kmh: Option<f64>,
-    pub sunshine_minutes: f64,
-    pub freezing_level_m: f64,
-    pub snow_line_m: Option<f64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Sky {
-    Clear,
-    Cloudy,
-    Fog,
-    Drizzle,
-    FreezingDrizzle,
-    Rain,
-    FreezingRain,
-    Snow,
-    RainShowers,
-    SnowShowers,
-    Thunderstorm,
-}
-
-impl Sky {
-    pub fn label(self) -> &'static str {
-        match self {
-            Sky::Clear => "clear",
-            Sky::Cloudy => "cloudy",
-            Sky::Fog => "fog",
-            Sky::Drizzle => "drizzle",
-            Sky::FreezingDrizzle => "icy drizzle",
-            Sky::Rain => "rain",
-            Sky::FreezingRain => "icy rain",
-            Sky::Snow => "snow",
-            Sky::RainShowers => "rain showers",
-            Sky::SnowShowers => "snow showers",
-            Sky::Thunderstorm => "thunderstorm",
-        }
-    }
-}
-
-/// What falls during most of an hour.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Fall {
-    Nothing,
-    Rain,
-    Freezing,
-    Snow,
-}
-
-// Open-Meteo counts 7 cm of fresh snow as 10 mm of water.
-const WATER_MM_PER_SNOW_CM: f64 = 10.0 / 7.0;
-
-impl Hour {
-    pub fn best_wind(&self) -> f64 {
-        self.high_wind_kmh.unwrap_or(self.wind_kmh)
-    }
-
-    /// The amounts decide. When they do not point to snow, the sky does.
-    pub fn fall(&self) -> Fall {
-        if self.precipitation_mm <= 0.0 {
-            return Fall::Nothing;
-        }
-        if self.fresh_snow_cm * WATER_MM_PER_SNOW_CM * 2.0 >= self.precipitation_mm {
-            return Fall::Snow;
-        }
-        match self.sky {
-            Sky::FreezingDrizzle | Sky::FreezingRain => Fall::Freezing,
-            Sky::Snow | Sky::SnowShowers if self.temperature_c <= 0.0 => Fall::Snow,
-            Sky::Clear
-            | Sky::Cloudy
-            | Sky::Fog
-            | Sky::Drizzle
-            | Sky::Rain
-            | Sky::Snow
-            | Sky::RainShowers
-            | Sky::SnowShowers
-            | Sky::Thunderstorm => Fall::Rain,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct Daylight {
-    pub sunrise: i64,
-    pub sunset: i64,
 }
 
 #[derive(Debug)]
@@ -166,8 +129,8 @@ pub fn areas() -> Result<Vec<SavedArea>, Error> {
     run(&["areas", "--json"])
 }
 
-pub fn report(area: &str) -> Result<Report, Error> {
-    run(&["--json", "--", area])
+pub fn panel(area: &str) -> Result<Panel, Error> {
+    run(&["panel", "--", area])
 }
 
 pub fn search(text: &str) -> Result<Vec<Place>, Error> {
@@ -271,24 +234,6 @@ fn program(name: &str) -> OsString {
 mod tests {
     use super::*;
 
-    // Hours of the Bödele summit on 22 and 23 November 2026.
-    fn fall(sky: Sky, temperature_c: f64, precipitation_mm: f64, fresh_snow_cm: f64) -> Fall {
-        Hour {
-            time: 0,
-            sky,
-            temperature_c,
-            precipitation_mm,
-            fresh_snow_cm,
-            snow_depth_m: 0.0,
-            wind_kmh: 0.0,
-            high_wind_kmh: None,
-            sunshine_minutes: 0.0,
-            freezing_level_m: 0.0,
-            snow_line_m: None,
-        }
-        .fall()
-    }
-
     #[test]
     fn reads_saved_areas() {
         let json = r#"[
@@ -309,22 +254,31 @@ mod tests {
     }
 
     #[test]
-    fn says_what_falls_most() {
-        assert_eq!(fall(Sky::Cloudy, 2.0, 0.0, 0.0), Fall::Nothing);
-        assert_eq!(fall(Sky::Rain, 0.3, 0.7, 0.0), Fall::Rain);
-        assert_eq!(fall(Sky::Snow, -1.2, 1.5, 0.84), Fall::Snow);
-        assert_eq!(fall(Sky::Rain, 0.8, 1.5, 0.2), Fall::Rain);
-    }
+    fn reads_the_panel_of_the_engine() {
+        let json = r#"{
+            "name": "Bödele Ski", "utc_offset_seconds": 3600, "daylight": "07:36 - 16:37",
+            "snow_line": "1100 m", "freezing_level": "1100 m", "snow_depth": "4 cm",
+            "spots": [{"label": "summit", "height": "1453 m", "sky": "fog",
+                       "temperature": "-3 °C", "wind": "12 km/h"}],
+            "days": [], "marks": [{"position": 0.25, "text": "18h", "midnight": false}],
+            "chart_width": 370.0, "chart_height": 68.0,
+            "temperature": {"legend": [{"text": "temperature °C", "tone": "line"}],
+                            "line": "M 0 34 L 370 34 ", "snow": "", "rain": "", "ice": "",
+                            "ticks": [{"position": 0.5, "text": "0"}], "zero": 0.5},
+            "wind": {"legend": [], "line": "", "snow": "", "rain": "", "ice": "",
+                     "ticks": [], "zero": null},
+            "precipitation": {"legend": [{"text": "snow", "tone": "snow"}], "line": "",
+                              "snow": "", "rain": "", "ice": "", "ticks": [], "zero": null},
+            "readings": ["Mon 18:00  -3 °C  wind 12 km/h"],
+            "credits": "Weather data by Open-Meteo (CC BY 4.0)"
+        }"#;
 
-    #[test]
-    fn freezing_drizzle_is_not_rain_nor_snow() {
-        assert_eq!(fall(Sky::FreezingDrizzle, -2.9, 0.4, 0.0), Fall::Freezing);
-        assert_eq!(fall(Sky::FreezingDrizzle, -2.9, 0.6, 0.42), Fall::Snow);
-    }
+        let panel: Panel = serde_json::from_str(json).unwrap();
 
-    #[test]
-    fn snow_showers_below_zero_are_snow() {
-        assert_eq!(fall(Sky::SnowShowers, -2.6, 0.4, 0.0), Fall::Snow);
-        assert_eq!(fall(Sky::SnowShowers, 1.0, 0.4, 0.0), Fall::Rain);
+        assert_eq!(panel.utc_offset_seconds, 3600);
+        assert_eq!(panel.spots[0].temperature, "-3 °C");
+        assert_eq!(panel.temperature.zero, Some(0.5));
+        assert_eq!(panel.wind.zero, None);
+        assert!(matches!(panel.precipitation.legend[0].tone, Tone::Snow));
     }
 }

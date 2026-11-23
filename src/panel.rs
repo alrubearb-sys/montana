@@ -17,6 +17,8 @@ const WET_DAY_MM: f64 = 1.0;
 #[derive(Debug, Serialize)]
 pub struct Panel {
     pub name: String,
+    /// Of the summit, for the times shown with the panel.
+    pub utc_offset_seconds: i64,
     pub daylight: String,
     pub snow_line: String,
     pub freezing_level: String,
@@ -130,6 +132,7 @@ pub fn build(report: &Report, now: UnixTime) -> Panel {
         spots: spots(&now_spots),
         days: days(&totals),
         marks: marks(&hours, offset),
+        utc_offset_seconds: i64::from(offset),
         chart_width: chart::WIDTH,
         chart_height: chart::HEIGHT,
         temperature: temperature_chart(&hours),

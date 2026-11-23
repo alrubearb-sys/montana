@@ -9,7 +9,8 @@ export struct Mark { position: float, text: string, midnight: bool }
 export enum Tone { line, snow, ice }
 export struct Legend { text: string, tone: Tone }
 export struct Choice { title: string, detail: string, editable: bool, removable: bool }
-export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick] }
+// zero: where 0 °C is, from the top, or -1 when the chart has no such line.
+export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick], zero: float }
 
 // Omarchy's palette roles (themes/tokyo-night/colors.toml), so a later version can read
 // the active Omarchy theme instead of these values.
@@ -174,6 +175,7 @@ component Plot inherits Rectangle {
         width: root.axis - 6px;
         horizontal-alignment: right;
         text: tick.text;
+        color: chart.zero >= 0 && tick.text == "0" ? Theme.text : Theme.dim;
     }
 
     plot := Rectangle {
@@ -188,6 +190,13 @@ component Plot inherits Rectangle {
             width: 100%;
             height: 1px;
             background: Theme.grid;
+        }
+        // Freezing, a thin red line so the side of 0 °C shows at a glance, as in Omarchy.
+        if chart.zero >= 0: Rectangle {
+            y: plot.height * chart.zero;
+            width: 100%;
+            height: 1px;
+            background: Theme.error.with-alpha(0.4);
         }
         for mark in marks: Rectangle {
             x: plot.width * mark.position;

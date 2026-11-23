@@ -1,4 +1,3 @@
-mod chart;
 mod clock;
 mod engine;
 mod place;
@@ -14,7 +13,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use slint::{ComponentHandle, LogicalPosition, PlatformError, Timer};
 
-use crate::engine::{Error, Place, Report, SavedArea};
+use crate::engine::{Error, Place, SavedArea};
 
 slint::slint! {
     #[edition = "1.19"]
@@ -57,7 +56,7 @@ struct App {
 }
 
 struct Saved {
-    report: Report,
+    panel: engine::Panel,
     at: i64,
 }
 
@@ -449,18 +448,18 @@ impl App {
         self.show_selected();
         let name = area.clone();
         in_background(
-            move || engine::report(&name),
+            move || engine::panel(&name),
             move |app, result| app.store(&area, result),
         );
     }
 
-    fn store(&self, area: &str, result: Result<Report, Error>) {
+    fn store(&self, area: &str, result: Result<engine::Panel, Error>) {
         if self.loading.borrow().as_deref() == Some(area) {
             self.loading.replace(None);
         }
         match result {
-            Ok(report) => {
-                let saved = Saved { report, at: now() };
+            Ok(panel) => {
+                let saved = Saved { panel, at: now() };
                 self.reports.borrow_mut().insert(area.to_string(), saved);
                 self.problem.take();
                 self.show_selected();
@@ -490,8 +489,8 @@ impl App {
         let reports = self.reports.borrow();
         let updated = match reports.get(&area) {
             Some(saved) => {
-                fill(panel, view::build(&saved.report, now()));
-                let offset = saved.report.summit.utc_offset_seconds;
+                fill(panel, view::build(&saved.panel));
+                let offset = saved.panel.utc_offset_seconds;
                 format!("Updated {}", clock::clock(saved.at, offset))
             }
             None => {
