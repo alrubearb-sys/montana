@@ -8,6 +8,7 @@ pub enum Error {
     BadCoordinates(String),
     BadFile(PathBuf, serde_json::Error),
     File(PathBuf, io::Error),
+    LastArea(String),
     MissingData(&'static str),
     MissingHome,
     Network(Box<ureq::Error>),
@@ -27,6 +28,10 @@ impl fmt::Display for Error {
             Error::BadCoordinates(text) => write!(f, "cannot read the coordinates: {text}"),
             Error::BadFile(path, source) => write!(f, "cannot read {}: {source}", path.display()),
             Error::File(path, source) => write!(f, "cannot access {}: {source}", path.display()),
+            Error::LastArea(name) => write!(
+                f,
+                "{name} is the only area left: add another one before removing it"
+            ),
             Error::MissingData(name) => write!(f, "the forecast has no {name}"),
             Error::MissingHome => write!(f, "the HOME variable is not set"),
             Error::Network(source) => write!(f, "the request failed: {source}"),
@@ -54,6 +59,7 @@ impl std::error::Error for Error {
             Error::Network(source) => Some(source),
             Error::AlreadySaved(_)
             | Error::BadCoordinates(_)
+            | Error::LastArea(_)
             | Error::MissingData(_)
             | Error::MissingHome
             | Error::NoElevation

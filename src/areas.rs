@@ -11,12 +11,36 @@ use crate::storage;
 const REQUEST_INTERVAL_MS: u64 = 1100;
 
 pub fn all() -> Result<Vec<Area>, Error> {
-    let mut areas = storage::load_areas()?;
-    let boedele = boedele();
-    if areas.iter().all(|area| area.name != boedele.name) {
-        areas.push(boedele);
+    Ok(or_default(storage::load_areas()?))
+}
+
+// Bödele until something is saved: then it is one more area, and can be removed.
+fn or_default(areas: Vec<Area>) -> Vec<Area> {
+    if areas.is_empty() {
+        vec![boedele()]
+    } else {
+        areas
     }
-    Ok(areas)
+}
+
+pub fn remove(name: &str) -> Result<Area, Error> {
+    let (areas, removed) = without(all()?, name)?;
+    storage::save_areas(&areas)?;
+    Ok(removed)
+}
+
+// The last area stays, as the last city of Omarchy's world clock does.
+fn without(mut areas: Vec<Area>, name: &str) -> Result<(Vec<Area>, Area), Error> {
+    let wanted = name.to_lowercase();
+    let index = areas
+        .iter()
+        .position(|area| area.name.to_lowercase() == wanted)
+        .ok_or_else(|| Error::UnknownArea(name.to_string()))?;
+    if areas.len() == 1 {
+        return Err(Error::LastArea(name.to_string()));
+    }
+    let removed = areas.remove(index);
+    Ok((areas, removed))
 }
 
 pub fn find(name: &str) -> Result<Area, Error> {
@@ -65,7 +89,8 @@ pub fn add(text: &str, chosen: usize, name: Option<String>) -> Result<(Area, Sou
     let place = places.swap_remove(index);
 
     let name = name.unwrap_or_else(|| place.name.clone());
-    let mut areas = storage::load_areas()?;
+    // all(), not the file: the first area saved must not make Bödele disappear.
+    let mut areas = all()?;
     if areas
         .iter()
         .any(|area| area.name.to_lowercase() == name.to_lowercase())
@@ -123,6 +148,41 @@ fn boedele() -> Area {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn named(name: &str) -> Area {
+        Area {
+            name: name.to_string(),
+            ..boedele()
+        }
+    }
+
+    #[test]
+    fn boedele_only_while_nothing_is_saved() {
+        assert_eq!(or_default(Vec::new()), [boedele()]);
+        assert_eq!(or_default(vec![named("Säntis")]), [named("Säntis")]);
+    }
+
+    #[test]
+    fn removes_an_area_ignoring_case() {
+        let areas = vec![named("Säntis"), named("Aneto")];
+
+        let (kept, removed) = without(areas, "säntis").unwrap();
+
+        assert_eq!(kept, [named("Aneto")]);
+        assert_eq!(removed.name, "Säntis");
+    }
+
+    #[test]
+    fn the_last_area_stays() {
+        assert!(matches!(
+            without(vec![named("Aneto")], "Aneto"),
+            Err(Error::LastArea(_))
+        ));
+        assert!(matches!(
+            without(vec![named("Aneto"), named("Säntis")], "Mont Blanc"),
+            Err(Error::UnknownArea(_))
+        ));
+    }
 
     #[test]
     fn waits_between_requests() {

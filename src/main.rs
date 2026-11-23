@@ -54,6 +54,8 @@ enum Command {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Remove a saved area
+    Remove { name: String },
     /// List the areas
     Areas {
         /// Print the names as JSON
@@ -78,6 +80,7 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
     match (cli.command, cli.area) {
         (Some(Command::Search { text, json }), _) => search(out, &text, json),
         (Some(Command::Add { text, result, name }), _) => add(out, &text, result, name),
+        (Some(Command::Remove { name }), _) => remove(out, &name),
         (Some(Command::Areas { json }), _) => list(out, json),
         (None, Some(area)) if cli.json => show_json(out, &area),
         (None, Some(area)) => show(out, &area),
@@ -111,6 +114,12 @@ fn add(out: &mut impl Write, text: &str, chosen: usize, name: Option<String>) ->
     writeln!(out, "Saved: {}", area.name)?;
     output::print_point(out, "Summit", area.summit)?;
     writeln!(out, "Elevation from {}", output::credit(source))?;
+    Ok(())
+}
+
+fn remove(out: &mut impl Write, name: &str) -> Result<(), Error> {
+    let area = areas::remove(name)?;
+    writeln!(out, "Removed: {}", area.name)?;
     Ok(())
 }
 
