@@ -9,7 +9,7 @@ new=target/Montana.app
 cargo build --release --workspace
 rm -rf "$new"
 mkdir -p "$new/Contents/MacOS" "$new/Contents/Resources"
-cp target/release/montana target/release/montana-bar "$new/Contents/MacOS/"
+cp target/release/montana target/release/montana-bar target/release/montana-map "$new/Contents/MacOS/"
 cp bar/ui/montana.icns bar/ui/fonts/OFL.txt "$new/Contents/Resources/"
 cat > "$new/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -30,9 +30,12 @@ cat > "$new/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 codesign --force --sign - "$new/Contents/MacOS/montana"
+codesign --force --sign - "$new/Contents/MacOS/montana-map"
 codesign --force --sign - "$new"
 
+# The map too: while it runs, macOS takes Montana as open and does not start the panel.
 pkill -x montana-bar || true
+pkill -x montana-map || true
 rm -rf "$app"
 cp -R "$new" "$app"
 echo "Installed $app"

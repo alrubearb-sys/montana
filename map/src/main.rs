@@ -1,6 +1,6 @@
 mod engine;
 
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,11 +18,12 @@ use walkers::{HeaderValue, HttpOptions, HttpTiles, Map, MapMemory, Position, lon
 
 use crate::engine::Place;
 
-// The panel tells a saved map from a closed one by the exit code.
+// The panel tells a saved map from a closed one by the exit code, and reads the
+// name of the new area from the output.
 const CANCELLED: u8 = 2;
 const START_ZOOM: f64 = 14.0;
 const PLACE_ZOOM: f64 = 14.0;
-const USAGE: &str = "usage: montana-map <area> <latitude,longitude> [<latitude,longitude>]";
+const USAGE: &str = "usage: montana-map <latitude,longitude of where to start>";
 
 // Omarchy's Tokyo Night roles, as in the panel.
 const BACKGROUND: Color32 = Color32::from_rgb(0x1a, 0x1b, 0x26);
@@ -34,15 +35,18 @@ const BLUE: Color32 = Color32::from_rgb(0x7a, 0xa2, 0xf7);
 
 // Omarchy's type scale and spacing at its default base size of 12.
 const CAPTION: f32 = 10.0;
+// The map's credit must be there, but should hardly be seen.
+const CREDIT: f32 = 9.0;
+// Opacity of everything drawn over the map: the map is guessed through it, and the
+// text stays easy to read.
+const SEE_THROUGH: f32 = 0.88;
 const BODY: f32 = 12.0;
 const ROW_HEIGHT: f32 = 28.0;
 const ROW_PADDING: f32 = 12.0;
 const GAP: f32 = 8.0;
 
 struct Args {
-    area: String,
-    summit: (f64, f64),
-    base: Option<(f64, f64)>,
+    center: (f64, f64),
 }
 
 enum Message {
@@ -50,13 +54,15 @@ enum Message {
     Saved(Result<(), engine::Error>),
 }
 
+// A new area: no marks until they are clicked, and a name to save it with.
 struct MapApp {
-    area: String,
     tiles: HttpTiles,
     memory: MapMemory,
     start: Position,
-    summit: Position,
+    summit: Option<Position>,
     base: Option<Position>,
+    name: String,
+    kind: Option<String>,
     typed: String,
     places: Vec<Place>,
     searched: bool,
@@ -65,7 +71,7 @@ struct MapApp {
     problem: String,
     sender: Sender<Message>,
     receiver: Receiver<Message>,
-    saved: Rc<Cell<bool>>,
+    saved: Rc<RefCell<Option<String>>>,
 }
 
 fn main() -> ExitCode {
@@ -76,21 +82,26 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let saved = Rc::new(Cell::new(false));
-    match run(args, Rc::clone(&saved)) {
-        Ok(()) if saved.get() => ExitCode::SUCCESS,
-        Ok(()) => ExitCode::from(CANCELLED),
-        Err(error) => {
+    let saved = Rc::new(RefCell::new(None));
+    let result = run(args, Rc::clone(&saved));
+    let name = saved.borrow_mut().take();
+    match (result, name) {
+        (Ok(()), Some(name)) => {
+            println!("{name}");
+            ExitCode::SUCCESS
+        }
+        (Ok(()), None) => ExitCode::from(CANCELLED),
+        (Err(error), _) => {
             eprintln!("Error: {error}");
             ExitCode::FAILURE
         }
     }
 }
 
-fn run(args: Args, saved: Rc<Cell<bool>>) -> eframe::Result {
+fn run(args: Args, saved: Rc<RefCell<Option<String>>>) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title(format!("{} · montana", args.area))
+            .with_title("New area · montana")
             .with_inner_size([900.0, 640.0]),
         ..eframe::NativeOptions::default()
     };
@@ -105,11 +116,10 @@ fn run(args: Args, saved: Rc<Cell<bool>>) -> eframe::Result {
 }
 
 fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
-    let area = args.next().ok_or("missing the area")?;
-    let summit = args.next().ok_or("missing the summit")?;
-    let summit = coordinates(&summit)?;
-    let base = args.next().map(|base| coordinates(&base)).transpose()?;
-    Ok(Args { area, summit, base })
+    let center = args.next().ok_or("missing where to start")?;
+    Ok(Args {
+        center: coordinates(&center)?,
+    })
 }
 
 fn coordinates(text: &str) -> Result<(f64, f64), String> {
@@ -129,7 +139,7 @@ fn degrees(position: Position) -> (f64, f64) {
 }
 
 impl MapApp {
-    fn new(args: Args, saved: Rc<Cell<bool>>, ctx: egui::Context) -> Self {
+    fn new(args: Args, saved: Rc<RefCell<Option<String>>>, ctx: egui::Context) -> Self {
         let options = HttpOptions {
             cache: tile_cache(),
             user_agent: Some(HeaderValue::from_static(
@@ -141,14 +151,14 @@ impl MapApp {
         // Only fails outside the zoom levels the map knows.
         let _ = memory.set_zoom(START_ZOOM);
         let (sender, receiver) = mpsc::channel();
-        let summit = position(args.summit);
         Self {
-            area: args.area,
             tiles: HttpTiles::with_options(OpenTopoMap(OpenTopoServer::A), options, ctx),
             memory,
-            start: summit,
-            summit,
-            base: args.base.map(position),
+            start: position(args.center),
+            summit: None,
+            base: None,
+            name: String::new(),
+            kind: None,
             typed: String::new(),
             places: Vec::new(),
             searched: false,
@@ -170,7 +180,7 @@ impl MapApp {
                     self.places = places;
                 }
                 Message::Saved(Ok(())) => {
-                    self.saved.set(true);
+                    self.saved.replace(Some(self.name.trim().to_string()));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
                 Message::Found(Err(error)) | Message::Saved(Err(error)) => {
@@ -199,27 +209,36 @@ impl MapApp {
         });
     }
 
+    fn ready(&self) -> bool {
+        self.summit.is_some() && !self.name.trim().is_empty() && !self.saving
+    }
+
     fn save(&mut self, ctx: &egui::Context) {
-        if self.saving {
+        let Some(summit) = self.summit.filter(|_| self.ready()) else {
             return;
-        }
+        };
         self.saving = true;
         self.problem.clear();
-        let area = self.area.clone();
-        let summit = degrees(self.summit);
+        let name = self.name.trim().to_string();
+        let kind = self.kind.clone();
+        let summit = degrees(summit);
         let base = self.base.map(degrees);
         let sender = self.sender.clone();
         let ctx = ctx.clone();
         thread::spawn(move || {
-            let _ = sender.send(Message::Saved(engine::move_area(&area, summit, base)));
+            let created = engine::create(&name, kind.as_deref(), summit, base);
+            let _ = sender.send(Message::Saved(created));
             ctx.request_repaint();
         });
     }
 
+    // The place found also names the area, which can still be changed.
     fn go_to(&mut self, place: &Place) {
         self.memory
             .center_at(position((place.latitude, place.longitude)));
         let _ = self.memory.set_zoom(PLACE_ZOOM);
+        self.name = place.name.clone();
+        self.kind = Some(place.kind.clone());
         self.places.clear();
         self.searched = false;
     }
@@ -233,7 +252,7 @@ impl MapApp {
                 if let Some(pointer) = response.interact_pointer_pos() {
                     let at = projector.unproject(pointer.to_vec2());
                     if response.clicked() {
-                        *summit = at;
+                        *summit = Some(at);
                     } else if response.secondary_clicked() {
                         *base = Some(at);
                     }
@@ -242,7 +261,9 @@ impl MapApp {
                 if let Some(at) = *base {
                     mark(painter, projector.project(at).to_pos2(), "Base", BLUE);
                 }
-                mark(painter, projector.project(*summit).to_pos2(), "Summit", RED);
+                if let Some(at) = *summit {
+                    mark(painter, projector.project(at).to_pos2(), "Summit", RED);
+                }
             },
         );
     }
@@ -290,7 +311,8 @@ impl MapApp {
 
     fn buttons(&mut self, ctx: &egui::Context) {
         egui::Area::new(egui::Id::unique("buttons"))
-            .anchor(Align2::CENTER_BOTTOM, vec2(0.0, -GAP * 2.0))
+            // High enough to leave the corner to the map's credit.
+            .anchor(Align2::CENTER_BOTTOM, vec2(0.0, -GAP * 3.0))
             .show(ctx, |ui| {
                 if !self.problem.is_empty() {
                     popup_frame().show(ui, |ui| {
@@ -298,12 +320,25 @@ impl MapApp {
                     });
                 }
                 ui.horizontal(|ui| {
+                    // Drawn like the buttons beside it, so the three read as one row.
+                    egui::Frame::NONE
+                        .fill(translucent(mix(0.04), SEE_THROUGH))
+                        .stroke(Stroke::new(1.0, translucent(FOREGROUND, 0.4)))
+                        .inner_margin(egui::Margin::symmetric(10, 6))
+                        .show(ui, |ui| {
+                            ui.add(
+                                TextEdit::singleline(&mut self.name)
+                                    .hint_text("Name")
+                                    .frame(egui::Frame::NONE)
+                                    .desired_width(200.0),
+                            );
+                        });
                     if ui.button("Cancel").clicked() {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                     let label = if self.saving { "Saving..." } else { "Save" };
                     if ui
-                        .add_enabled(!self.saving, egui::Button::new(label))
+                        .add_enabled(self.ready(), egui::Button::new(label))
                         .clicked()
                     {
                         self.save(ui.ctx());
@@ -329,20 +364,15 @@ impl eframe::App for MapApp {
         self.search_box(&ctx);
         self.buttons(&ctx);
         egui::Area::new(egui::Id::unique("credits"))
-            .anchor(Align2::RIGHT_BOTTOM, vec2(-GAP, -GAP))
+            .anchor(Align2::RIGHT_BOTTOM, vec2(-4.0, -2.0))
             .show(&ctx, |ui| {
-                egui::Frame::NONE
-                    .fill(BACKGROUND)
-                    .inner_margin(4.0)
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(
-                                "© OpenStreetMap contributors, SRTM · © OpenTopoMap (CC-BY-SA)",
-                            )
-                            .size(CAPTION)
-                            .color(DIM),
-                        );
-                    });
+                ui.label(
+                    egui::RichText::new(
+                        "© OpenStreetMap contributors, SRTM · © OpenTopoMap (CC-BY-SA)",
+                    )
+                    .size(CREDIT)
+                    .color(translucent(BACKGROUND, 0.5)),
+                );
             });
     }
 }
@@ -350,7 +380,7 @@ impl eframe::App for MapApp {
 // The panel's popups: background with a 2 px accent border and square corners.
 fn popup_frame() -> egui::Frame {
     egui::Frame::NONE
-        .fill(BACKGROUND)
+        .fill(translucent(BACKGROUND, SEE_THROUGH))
         .stroke(Stroke::new(2.0, ACCENT))
         .inner_margin(4.0)
 }
@@ -426,6 +456,11 @@ fn mark(painter: &egui::Painter, at: Pos2, label: &str, color: Color32) {
     painter.galley(corner, text, color);
 }
 
+fn translucent(color: Color32, alpha: f32) -> Color32 {
+    let alpha = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
+}
+
 // The foreground over the background at Omarchy's fill strengths.
 fn mix(alpha: f32) -> Color32 {
     let blend = |back: u8, front: u8| {
@@ -469,7 +504,11 @@ fn omarchy_look(ctx: &egui::Context) {
     visuals.window_stroke = Stroke::new(2.0, ACCENT);
     visuals.window_shadow = egui::Shadow::NONE;
     visuals.popup_shadow = egui::Shadow::NONE;
-    // Omarchy's [controls]: fill and border strength for idle, hover and press.
+    // Save waits greyed until there is a summit and a name; at egui's 0.5, over the
+    // see-through fill, it was hard to read.
+    visuals.disabled_alpha = 0.7;
+    // Omarchy's [controls]: fill and border strength for idle, hover and press. The
+    // buttons sit on the map, so they let it show through.
     let widgets = &mut visuals.widgets;
     for (state, fill, border) in [
         (&mut widgets.inactive, 0.04, 0.4),
@@ -477,9 +516,9 @@ fn omarchy_look(ctx: &egui::Context) {
         (&mut widgets.active, 0.22, 0.25),
         (&mut widgets.open, 0.08, 0.25),
     ] {
-        state.bg_fill = mix(fill);
-        state.weak_bg_fill = mix(fill);
-        state.bg_stroke = Stroke::new(1.0, mix(border));
+        state.bg_fill = translucent(mix(fill), SEE_THROUGH);
+        state.weak_bg_fill = translucent(mix(fill), SEE_THROUGH);
+        state.bg_stroke = Stroke::new(1.0, translucent(FOREGROUND, border));
         state.fg_stroke = Stroke::new(1.0, FOREGROUND);
         state.corner_radius = CornerRadius::ZERO;
         state.expansion = 0.0;
@@ -524,19 +563,15 @@ mod tests {
     }
 
     #[test]
-    fn reads_area_summit_and_base() {
-        let read = args(&["Bödele ski resort", "47.4031,9.8132", "47.4178,9.8182"]).unwrap();
-
-        assert_eq!(read.area, "Bödele ski resort");
-        assert_eq!(read.summit, (47.4031, 9.8132));
-        assert_eq!(read.base, Some((47.4178, 9.8182)));
-        assert_eq!(args(&["Lachen", "47.41,9.35"]).unwrap().base, None);
+    fn starts_where_it_is_told() {
+        assert_eq!(args(&["47.4031,9.8132"]).unwrap().center, (47.4031, 9.8132));
+        assert_eq!(args(&["40.4,-3.7"]).unwrap().center, (40.4, -3.7));
     }
 
     #[test]
     fn rejects_missing_or_bad_points() {
-        assert!(args(&["Lachen"]).is_err());
-        assert!(args(&["Lachen", "north"]).is_err());
+        assert!(args(&[]).is_err());
+        assert!(args(&["north"]).is_err());
     }
 
     #[test]

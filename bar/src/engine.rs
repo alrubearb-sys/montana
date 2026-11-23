@@ -37,6 +37,8 @@ struct SearchResults {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Point {
+    pub latitude: f64,
+    pub longitude: f64,
     pub elevation: f64,
 }
 
@@ -171,6 +173,16 @@ pub fn add(text: &str, number: usize) -> Result<(), Error> {
     execute(&["add", "--result", &number.to_string(), "--", text]).map(|_| ())
 }
 
+// Waits until the map is closed, and gives the name of the area saved in it, if any.
+pub fn open_map(center: &Point) -> Result<Option<String>, Error> {
+    let output = Command::new(program("montana-map"))
+        .arg(format!("{},{}", center.latitude, center.longitude))
+        .output()
+        .map_err(Error::NotFound)?;
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(Some(name).filter(|name| output.status.success() && !name.is_empty()))
+}
+
 pub fn remove(area: &str) -> Result<(), Error> {
     execute(&["remove", "--", area]).map(|_| ())
 }
@@ -181,7 +193,7 @@ fn run<T: DeserializeOwned>(arguments: &[&str]) -> Result<T, Error> {
 
 // A separate process, so that the memory of the network connection is given back.
 fn execute(arguments: &[&str]) -> Result<Vec<u8>, Error> {
-    let output = Command::new(program())
+    let output = Command::new(program("montana"))
         .args(arguments)
         .output()
         .map_err(Error::NotFound)?;
@@ -193,12 +205,13 @@ fn execute(arguments: &[&str]) -> Result<Vec<u8>, Error> {
     }
 }
 
-fn program() -> OsString {
+// Next to the panel inside Montana.app, or else on the PATH.
+fn program(name: &str) -> OsString {
     env::current_exe()
         .ok()
-        .map(|path| path.with_file_name("montana"))
+        .map(|path| path.with_file_name(name))
         .filter(|path| path.is_file())
-        .map_or_else(|| OsString::from("montana"), OsString::from)
+        .map_or_else(|| OsString::from(name), OsString::from)
 }
 
 #[cfg(test)]

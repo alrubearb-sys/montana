@@ -56,6 +56,19 @@ enum Command {
     },
     /// Remove a saved area
     Remove { name: String },
+    /// Save a new area from coordinates
+    Create {
+        name: String,
+        /// Summit, as latitude,longitude
+        #[arg(long, value_parser = coordinates, allow_hyphen_values = true)]
+        summit: (f64, f64),
+        /// Base, as latitude,longitude
+        #[arg(long, value_parser = coordinates, allow_hyphen_values = true)]
+        base: Option<(f64, f64)>,
+        /// What the place is, for example "peak"
+        #[arg(long)]
+        kind: Option<String>,
+    },
     /// Move the summit or the base of a saved area
     Move {
         name: String,
@@ -92,6 +105,15 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
         (Some(Command::Add { text, result, name }), _) => add(out, &text, result, name),
         (Some(Command::Remove { name }), _) => remove(out, &name),
         (Some(Command::Move { name, summit, base }), _) => move_area(out, &name, summit, base),
+        (
+            Some(Command::Create {
+                name,
+                summit,
+                base,
+                kind,
+            }),
+            _,
+        ) => create(out, &name, kind, summit, base),
         (Some(Command::Areas { json }), _) => list(out, json),
         (None, Some(area)) if cli.json => show_json(out, &area),
         (None, Some(area)) => show(out, &area),
@@ -131,6 +153,22 @@ fn add(out: &mut impl Write, text: &str, chosen: usize, name: Option<String>) ->
 fn remove(out: &mut impl Write, name: &str) -> Result<(), Error> {
     let area = areas::remove(name)?;
     writeln!(out, "Removed: {}", area.name)?;
+    Ok(())
+}
+
+fn create(
+    out: &mut impl Write,
+    name: &str,
+    kind: Option<String>,
+    summit: (f64, f64),
+    base: Option<(f64, f64)>,
+) -> Result<(), Error> {
+    let area = areas::create(name, kind, summit, base)?;
+    writeln!(out, "Saved: {}", area.name)?;
+    output::print_point(out, "Summit", area.summit)?;
+    if let Some(base) = area.base {
+        output::print_point(out, "Base", base)?;
+    }
     Ok(())
 }
 

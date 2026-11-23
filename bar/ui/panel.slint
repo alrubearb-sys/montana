@@ -97,6 +97,31 @@ component Button inherits Rectangle {
     }
 }
 
+// A square control with a folded map drawn on it: the panel font has no icons.
+component MapButton inherits Rectangle {
+    callback clicked;
+    width: Style.control-height;
+    height: Style.control-height;
+    background: Theme.text.with-alpha(touch.pressed ? 0.22 : touch.has-hover ? 0.08 : 0.04);
+    border-width: 1px;
+    border-color: Theme.text.with-alpha(touch.has-hover ? 0.25 : 0.4);
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 16px;
+        height: 14px;
+        viewbox-width: 16;
+        viewbox-height: 14;
+        commands: "M 1 2 L 5.5 1 L 10.5 2 L 15 1 L 15 12 L 10.5 13 L 5.5 12 L 1 13 Z M 5.5 1 L 5.5 12 M 10.5 2 L 10.5 13";
+        stroke: Theme.text;
+        stroke-width: 1.25px;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 // Omarchy's dropdown trigger: control chrome, the current choice and a chevron.
 component Picker inherits Rectangle {
     in property <string> text;
@@ -237,6 +262,7 @@ export component Panel inherits Window {
     callback previous;
     callback next;
     callback refresh;
+    callback open-map;
     callback dismiss;
     callback quit;
     property <int> hours: readings.length;
@@ -306,6 +332,7 @@ export component Panel inherits Window {
                         }
                     }
                 }
+                MapButton { clicked => { root.open-map(); } }
                 Text { text: root.daylight; color: Theme.sun; font-size: Style.body; vertical-alignment: center; }
             }
             Separator { }

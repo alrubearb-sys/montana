@@ -444,7 +444,11 @@ mod tests {
         Report {
             kind: None,
             summit: Forecast {
-                point: Point { elevation: 1448.0 },
+                point: Point {
+                    latitude: 47.4031,
+                    longitude: 9.8132,
+                    elevation: 1448.0,
+                },
                 utc_offset_seconds: 3600,
                 hours: (0..72).map(hour).collect(),
                 days: vec![Daylight {

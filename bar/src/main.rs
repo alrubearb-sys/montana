@@ -121,6 +121,7 @@ fn connect(panel: &Panel) {
     panel.on_edited(|text| with_app(|app| app.filter(&text)));
     panel.on_search(|text| with_app(|app| app.search(&text)));
     panel.on_refresh(|| with_app(App::fetch));
+    panel.on_open_map(|| with_app(App::open_map));
     panel.on_dismiss(|| with_app(App::close));
     panel.on_quit(|| {
         // It only fails when the loop has already ended.
@@ -298,6 +299,29 @@ impl App {
             move || engine::remove(&area),
             |app, result| match result {
                 Ok(()) => app.reload_areas(None),
+                Err(error) => app.report_problem(&error),
+            },
+        );
+    }
+
+    fn open_map(&self) {
+        let Some(area) = self.selected_area() else {
+            return;
+        };
+        // The map starts where the area on show is, once its forecast says where.
+        let center = self
+            .reports
+            .borrow()
+            .get(&area)
+            .map(|saved| saved.report.summit.point.clone());
+        let Some(center) = center else {
+            return;
+        };
+        in_background(
+            move || engine::open_map(&center),
+            |app, result| match result {
+                Ok(Some(name)) => app.reload_areas(Some(name)),
+                Ok(None) => {}
                 Err(error) => app.report_problem(&error),
             },
         );

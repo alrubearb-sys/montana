@@ -114,6 +114,32 @@ pub fn add(text: &str, chosen: usize, name: Option<String>) -> Result<(Area, Sou
     Ok((area, source))
 }
 
+// A new area from points picked on the map, with their elevations.
+pub fn create(
+    name: &str,
+    kind: Option<String>,
+    summit: (f64, f64),
+    base: Option<(f64, f64)>,
+) -> Result<Area, Error> {
+    let name = name.trim();
+    let mut areas = all()?;
+    if areas
+        .iter()
+        .any(|area| area.name.to_lowercase() == name.to_lowercase())
+    {
+        return Err(Error::AlreadySaved(name.to_string()));
+    }
+    let area = Area {
+        name: name.to_string(),
+        kind,
+        summit: point_at(summit)?,
+        base: base.map(point_at).transpose()?,
+    };
+    areas.push(area.clone());
+    storage::save_areas(&areas)?;
+    Ok(area)
+}
+
 // New summit and, if given, new base for a saved area, with their elevations.
 // Without a new base, the old one stays.
 pub fn move_to(name: &str, summit: (f64, f64), base: Option<(f64, f64)>) -> Result<Area, Error> {

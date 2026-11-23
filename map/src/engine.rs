@@ -44,14 +44,22 @@ pub fn search(text: &str) -> Result<Vec<Place>, Error> {
     Ok(results.places)
 }
 
-pub fn move_area(area: &str, summit: (f64, f64), base: Option<(f64, f64)>) -> Result<(), Error> {
+pub fn create(
+    name: &str,
+    kind: Option<&str>,
+    summit: (f64, f64),
+    base: Option<(f64, f64)>,
+) -> Result<(), Error> {
     let summit = degrees(summit);
     let base = base.map(degrees);
-    let mut arguments = vec!["move", "--summit", &summit];
+    let mut arguments = vec!["create", "--summit", &summit];
     if let Some(base) = &base {
         arguments.extend(["--base", base]);
     }
-    arguments.extend(["--", area]);
+    if let Some(kind) = kind {
+        arguments.extend(["--kind", kind]);
+    }
+    arguments.extend(["--", name]);
     execute(&arguments).map(|_| ())
 }
 
