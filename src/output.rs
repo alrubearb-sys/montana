@@ -8,6 +8,13 @@ use crate::error::Error;
 use crate::model::{Forecast, HourlyForecast, Point, UnixTime};
 
 pub const WEATHER_CREDIT: &str = "Weather data by Open-Meteo (CC BY 4.0)";
+pub const SEARCH_CREDIT: &str = "Search data © OpenStreetMap contributors (ODbL)";
+
+#[derive(Serialize)]
+pub struct SearchResults {
+    pub places: Vec<Place>,
+    pub credits: &'static str,
+}
 
 #[derive(Serialize)]
 pub struct Report {
@@ -146,6 +153,38 @@ mod tests {
         assert_eq!(clock(midnight, 3600), "00:00");
         assert_eq!(weekday(midnight, 0), "Sat");
         assert_eq!(clock(midnight, 0), "23:00");
+    }
+
+    #[test]
+    fn search_json_lists_places_with_credits() {
+        let results = SearchResults {
+            places: vec![Place {
+                name: String::from("Aneto"),
+                kind: String::from("peak"),
+                description: String::from("Aneto, Benasque, Spain"),
+                country_code: String::from("es"),
+                latitude: 42.6311,
+                longitude: 0.6567,
+                elevation: None,
+            }],
+            credits: SEARCH_CREDIT,
+        };
+
+        let json: serde_json::Value = serde_json::from_str(&to_json(&results).unwrap()).unwrap();
+
+        let expected = serde_json::json!({
+            "places": [{
+                "name": "Aneto",
+                "kind": "peak",
+                "description": "Aneto, Benasque, Spain",
+                "country_code": "es",
+                "latitude": 42.6311,
+                "longitude": 0.6567,
+                "elevation": null
+            }],
+            "credits": "Search data © OpenStreetMap contributors (ODbL)"
+        });
+        assert_eq!(json, expected);
     }
 
     #[test]

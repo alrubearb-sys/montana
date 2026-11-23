@@ -13,7 +13,7 @@ use clap::{Parser, Subcommand};
 use crate::data::forecast;
 use crate::error::Error;
 use crate::model::Area;
-use crate::output::Report;
+use crate::output::{Report, SearchResults};
 
 /// Should I go to the mountains?
 #[derive(Parser)]
@@ -37,7 +37,12 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Search for a place in Europe
-    Search { text: String },
+    Search {
+        text: String,
+        /// Print the places as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Save a place as an area
     Add {
         /// Place to search for
@@ -71,7 +76,7 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
     match (cli.command, cli.area) {
-        (Some(Command::Search { text }), _) => search(out, &text),
+        (Some(Command::Search { text, json }), _) => search(out, &text, json),
         (Some(Command::Add { text, result, name }), _) => add(out, &text, result, name),
         (Some(Command::Areas { json }), _) => list(out, json),
         (None, Some(area)) if cli.json => show_json(out, &area),
@@ -80,15 +85,24 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
     }
 }
 
-fn search(out: &mut impl Write, text: &str) -> Result<(), Error> {
+fn search(out: &mut impl Write, text: &str, json: bool) -> Result<(), Error> {
     let places = areas::search(text)?;
+    if json {
+        // No results is an answer for the panel, not an error.
+        let results = SearchResults {
+            places,
+            credits: output::SEARCH_CREDIT,
+        };
+        writeln!(out, "{}", output::to_json(&results)?)?;
+        return Ok(());
+    }
     if places.is_empty() {
         return Err(Error::NoResults(text.to_string()));
     }
     for (number, place) in (1..).zip(&places) {
         output::print_place(out, number, place)?;
     }
-    writeln!(out, "\nSearch data © OpenStreetMap contributors (ODbL)")?;
+    writeln!(out, "\n{}", output::SEARCH_CREDIT)?;
     Ok(())
 }
 
