@@ -1,0 +1,38 @@
+#!/bin/bash
+# Publishes a new version: ./release 1.1.0
+#
+# Sets the version, checks the code, commits, tags v1.1.0 and pushes. GitHub
+# Actions then builds the programs, makes the release and updates Homebrew.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+fail() {
+  echo "release: $1" >&2
+  exit 1
+}
+
+version=${1:-}
+[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "give the version, for example: ./release 1.1.0"
+[[ $(git branch --show-current) == main ]] || fail "switch to main first"
+[[ -z $(git status --porcelain --untracked-files=no) ]] || fail "commit or drop your changes first"
+git fetch --quiet origin
+[[ $(git rev-parse HEAD) == $(git rev-parse origin/main) ]] || fail "main differs from GitHub: pull or push first"
+! git rev-parse --quiet --verify "refs/tags/v$version" >/dev/null || fail "v$version already exists"
+
+# The only version line in the root Cargo.toml is the shared one.
+perl -pi -e "s/^version = \".*\"\$/version = \"$version\"/" Cargo.toml
+
+# The panel only builds on macOS.
+if [[ $(uname) == Darwin ]]; then
+  packages=(--workspace)
+else
+  packages=(-p peakcast -p peakcast-map)
+fi
+cargo fmt --all --check
+cargo clippy "${packages[@]}" --all-targets -- -D warnings
+cargo test "${packages[@]}"
+
+git commit --quiet --all --message "Release $version"
+git tag --annotate "v$version" --message "Peakcast $version"
+git push --quiet origin main "v$version"
+echo "Peakcast $version is on its way: https://github.com/alrubearb-sys/peakcast/actions"

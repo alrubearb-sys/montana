@@ -170,9 +170,11 @@ impl MapApp {
     fn new(args: Args, saved: Rc<RefCell<Option<String>>>, ctx: egui::Context) -> Self {
         let options = HttpOptions {
             cache: tile_cache(),
-            user_agent: Some(HeaderValue::from_static(
-                "peakcast-map/0.1 (https://github.com/alrubearb-sys/peakcast)",
-            )),
+            user_agent: Some(HeaderValue::from_static(concat!(
+                "peakcast-map/",
+                env!("CARGO_PKG_VERSION"),
+                " (https://github.com/alrubearb-sys/peakcast)"
+            ))),
             ..HttpOptions::default()
         };
         let mut memory = MapMemory::default();

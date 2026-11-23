@@ -1,10 +1,10 @@
 [package]
 name = "peakcast"
-version = "0.1.0"
-edition = "2024"
-description = "Should I go to the mountains this weekend? Ranks your favourite ski and alpine areas by forecast."
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/alrubearb-sys/peakcast"
+version.workspace = true
+edition.workspace = true
+description = "Mountain weather for the places you go: finds them, keeps them and prints their forecast."
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 clap = { version = "4.6.9", features = ["derive"] }
@@ -16,6 +16,13 @@ ureq = { version = "3.5.2", features = ["json"] }
 members = ["bar", "map"]
 # The bar is only for macOS: check it with --workspace there.
 default-members = ["."]
+
+# One version for the engine, the panel and the map: ./release changes it here.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alrubearb-sys/peakcast"
 
 [profile.release]
 lto = true

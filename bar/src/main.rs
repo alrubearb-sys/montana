@@ -67,6 +67,10 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), PlatformError> {
+    #[cfg(target_os = "macos")]
+    if let Err(error) = start_at_login() {
+        eprintln!("Error: cannot start Peakcast at login: {error}");
+    }
     select_backend()?;
     let app = Rc::new(App {
         panel: RefCell::default(),
@@ -528,4 +532,37 @@ fn now() -> i64 {
         .ok()
         .and_then(|elapsed| i64::try_from(elapsed.as_secs()).ok())
         .unwrap_or(0)
+}
+
+// Installed in /Applications, the app starts itself at login from then on: the
+// first time it runs it writes a LaunchAgent that opens it. Copies run from
+// elsewhere, as while developing, leave login alone.
+#[cfg(target_os = "macos")]
+fn start_at_login() -> std::io::Result<()> {
+    use std::{env, fs, path::Path};
+
+    const APP: &str = "/Applications/Peakcast.app";
+    const AGENT: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>local.peakcast.bar</string>
+  <key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-g</string><string>/Applications/Peakcast.app</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+</dict>
+</plist>
+"#;
+
+    let Some(home) = env::var_os("HOME") else {
+        return Ok(());
+    };
+    let agent = Path::new(&home).join("Library/LaunchAgents/local.peakcast.bar.plist");
+    if !env::current_exe()?.starts_with(APP) || agent.exists() {
+        return Ok(());
+    }
+    if let Some(folder) = agent.parent() {
+        fs::create_dir_all(folder)?;
+    }
+    fs::write(agent, AGENT)
 }
