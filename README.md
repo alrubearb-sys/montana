@@ -13,6 +13,21 @@ Peakcast has three parts, written in Rust:
 
 > Status: early days. This is a learning project, so things will change and break.
 
+## Install
+
+On a Mac with Apple Silicon:
+
+```
+brew tap alrubearb-sys/peakcast
+brew trust alrubearb-sys/peakcast
+brew install --cask peakcast
+```
+
+The panel starts at once and, from then on, at login; `brew upgrade --cask peakcast` updates it.
+
+On Linux, the engine and the map are in each [release](https://github.com/alrubearb-sys/peakcast/releases)
+for x86_64 and aarch64. An AUR package and the Omarchy plugin are coming.
+
 ## Using the engine
 
 ```
@@ -31,10 +46,13 @@ peakcast remove Säntis
 - [swisstopo](https://www.swisstopo.admin.ch/): elevations in Switzerland.
 - [OpenTopoMap](https://opentopomap.org/): map tiles (CC-BY-SA).
 
-## Build
+## Build and release
 
 You need [Rust](https://www.rust-lang.org/tools/install). On a Mac, `bar/bundle.sh` builds the three
 programs and installs `Peakcast.app` in `/Applications`.
+
+`./release 1.1.0` publishes a version: it sets the number, checks the code, tags and pushes, and
+GitHub Actions builds the release and updates the Homebrew cask.
 
 Progress is tracked in [issues](https://github.com/alrubearb-sys/peakcast/issues).
 

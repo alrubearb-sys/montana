@@ -10,18 +10,18 @@ cask "peakcast" do
   homepage "https://github.com/alrubearb-sys/peakcast"
 
   depends_on arch: :arm64
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "Peakcast.app"
   binary "#{appdir}/Peakcast.app/Contents/MacOS/peakcast"
 
   # Started once here; from then on it starts itself at login.
-  postflight do
-    system_command "/usr/bin/open", args: ["-g", "#{appdir}/Peakcast.app"]
+  postflight_steps do
+    run "/usr/bin/open", args: ["-g", "{{appdir}}/Peakcast.app"]
   end
 
-  uninstall quit:      "io.github.alrubearb-sys.peakcast",
-            launchctl: "local.peakcast.bar"
+  uninstall launchctl: "local.peakcast.bar",
+            quit:      "io.github.alrubearb-sys.peakcast"
 
   zap trash: [
     "~/.cache/peakcast",
