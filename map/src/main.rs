@@ -121,6 +121,8 @@ fn run(args: Args, saved: Rc<RefCell<Option<String>>>) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(title)
+            // What Hyprland matches to float it, as the window it is on the Mac.
+            .with_app_id("peakcast-map")
             .with_inner_size([900.0, 640.0]),
         ..eframe::NativeOptions::default()
     };
