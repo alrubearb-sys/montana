@@ -43,6 +43,9 @@ struct NominatimPlace {
 struct Address {
     #[serde(default)]
     country_code: String,
+    village: Option<String>,
+    town: Option<String>,
+    city: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -81,7 +84,11 @@ fn to_place(place: NominatimPlace) -> Result<Place, Error> {
             .extratags
             .and_then(|tags| tags.ele)
             .and_then(|text| parse_elevation(&text)),
-        name: name_or_start(place.name, &place.display_name),
+        name: with_settlement(
+            name_or_start(place.name, &place.display_name),
+            &place.addresstype,
+            &place.address,
+        ),
         kind: if place.addresstype.is_empty() {
             place.kind
         } else {
@@ -102,6 +109,30 @@ fn name_or_start(name: String, description: &str) -> String {
             .to_string()
     } else {
         name
+    }
+}
+
+// A neighbourhood or a postcode belongs to a town: "St. Gallen (Lachen)" says where
+// it is better than "Lachen", which half a dozen places are called.
+fn with_settlement(name: String, kind: &str, address: &Address) -> String {
+    let part = matches!(
+        kind,
+        "suburb"
+            | "quarter"
+            | "neighbourhood"
+            | "city_district"
+            | "borough"
+            | "postcode"
+            | "locality"
+            | "place"
+    );
+    let settlement = [&address.village, &address.town, &address.city]
+        .into_iter()
+        .flatten()
+        .find(|settlement| **settlement != name);
+    match settlement {
+        Some(settlement) if part => format!("{settlement} ({name})"),
+        Some(_) | None => name,
     }
 }
 
@@ -149,6 +180,31 @@ mod tests {
             .map(|place| (place.name.as_str(), place.kind.as_str()))
             .collect();
         assert_eq!(found, [("St. Gallen", "city"), ("Sankt Gallen", "village")]);
+    }
+
+    #[test]
+    fn neighbourhoods_carry_their_town() {
+        let places = parse(include_str!("../../tests/data/nominatim_lachen.json")).unwrap();
+
+        let names: Vec<_> = places.iter().map(|place| place.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "St. Gallen (Lachen)",
+                "Wittenbach (Lachen)",
+                "Betlis (Lachen)",
+                "Henau (Lachen)"
+            ]
+        );
+    }
+
+    #[test]
+    fn peaks_and_towns_keep_their_name() {
+        let santis = parse(include_str!("../../tests/data/nominatim_santis.json")).unwrap();
+        let st_gallen = parse(include_str!("../../tests/data/nominatim_st_gallen.json")).unwrap();
+
+        assert_eq!(santis[0].name, "Säntis");
+        assert_eq!(st_gallen[0].name, "St. Gallen");
     }
 
     #[test]
