@@ -199,6 +199,11 @@ pub fn update() -> Result<(), Error> {
     }
 }
 
+// `position` counts from 1, as in `peakcast order`.
+pub fn order(area: &str, position: usize) -> Result<(), Error> {
+    execute(&["order", "--", area, &position.to_string()]).map(|_| ())
+}
+
 pub fn remove(area: &str) -> Result<(), Error> {
     execute(&["remove", "--", area]).map(|_| ())
 }

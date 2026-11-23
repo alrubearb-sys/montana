@@ -131,6 +131,11 @@ fn connect(panel: &Panel) {
             with_app(|app| app.remove(index));
         }
     });
+    panel.on_move_area(|from, to| {
+        if let (Ok(from), Ok(to)) = (usize::try_from(from), usize::try_from(to)) {
+            with_app(|app| app.move_area(from, to));
+        }
+    });
     panel.on_edit(|index| {
         if let Ok(index) = usize::try_from(index) {
             with_app(|app| app.edit(index));
@@ -405,6 +410,32 @@ impl App {
         );
     }
 
+    // The list takes the new order at once, so nothing jumps back while the engine
+    // saves it; the area on show stays on show. Only an unfiltered list moves, so
+    // `from` and `to` are places in the list of areas itself.
+    fn move_area(&self, from: usize, to: usize) {
+        let moved = {
+            let mut areas = self.areas.borrow_mut();
+            if from == to || from >= areas.len() || to >= areas.len() {
+                return;
+            }
+            let shown = areas.get(self.selected.get()).cloned();
+            let area = areas.remove(from);
+            areas.insert(to, area.clone());
+            let selected = areas.iter().position(|name| Some(name) == shown.as_ref());
+            self.selected.set(selected.unwrap_or(0));
+            area
+        };
+        self.show_selected();
+        in_background(
+            move || engine::order(&moved, to + 1),
+            |app, result| match result {
+                Ok(()) => app.reload_areas(None),
+                Err(error) => app.report_problem(&error),
+            },
+        );
+    }
+
     fn reload_areas(&self, wanted: Option<String>) {
         in_background(engine::areas, move |app, result| match result {
             Ok(saved) => {
@@ -519,6 +550,14 @@ impl App {
             .unwrap_or(-1);
         panel.set_selected(selected);
         panel.set_searching(self.searching.get());
+        // Saved areas are dragged only while nothing is typed: a filtered list does
+        // not show their real order.
+        let movable = if self.typed.borrow().trim().is_empty() && matches.len() > 1 {
+            matches.len()
+        } else {
+            0
+        };
+        panel.set_movable(i32::try_from(movable).unwrap_or(0));
     }
 }
 

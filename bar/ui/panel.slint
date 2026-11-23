@@ -268,6 +268,9 @@ export component Panel inherits Window {
     in property <string> new-version;
     callback choose(int);
     callback remove(int);
+    callback move-area(int, int);
+    // How many saved areas lead the list and can be dragged; 0 while it is filtered.
+    in property <int> movable;
     callback edit(int);
     callback edited(string);
     callback search(string);
@@ -282,6 +285,76 @@ export component Panel inherits Window {
     property <int> hovered: -1;
     property <bool> picking;
     property <int> cursor;
+
+    // A saved area being dragged, as Omarchy's world clock drags its cities.
+    property <int> drag-from: -1;
+    property <int> drag-to: -1;
+    property <length> drag-offset;
+    property <bool> press-dragged;
+    property <bool> dropping;
+    // While the list takes its new order: the rows are reused by place, so a glide
+    // then would slide the wrong row.
+    property <bool> settling;
+
+    // A row is passed once the pointer is 0.6 of a row past it, as in Omarchy, so
+    // the target does not flicker at the edge between two rows.
+    function drag(index: int, offset: length) {
+        if root.dropping { return; }
+        if root.drag-from < 0 {
+            if index >= root.movable || abs(offset) < 4px { return; }
+            root.drag-from = index;
+            root.drag-to = index;
+            root.press-dragged = true;
+        }
+        root.drag-offset = offset;
+        let raw = offset / Style.popup-row-height;
+        let held = root.drag-to - root.drag-from;
+        let next = abs(raw - held) >= 0.6 ? round(raw) : held;
+        root.drag-to = max(0, min(root.movable - 1, root.drag-from + next));
+    }
+    // The row glides into its slot first; the new order is kept when it lands.
+    function drop() {
+        if root.drag-from < 0 || root.dropping { return; }
+        root.dropping = true;
+        root.drag-offset = (root.drag-to - root.drag-from) * Style.popup-row-height;
+        landing.running = true;
+    }
+    function land() {
+        let from = root.drag-from;
+        let to = root.drag-to;
+        root.settling = true;
+        settled.running = true;
+        root.dropping = false;
+        root.drag-from = -1;
+        root.drag-to = -1;
+        root.drag-offset = 0;
+        root.cursor = to;
+        root.move-area(from, to);
+    }
+    settled := Timer {
+        interval: 150ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.settling = false;
+        }
+    }
+    landing := Timer {
+        interval: 120ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            root.land();
+        }
+    }
+    // The dragged row follows the pointer; the ones it passes make room for it.
+    pure function shift(index: int) -> length {
+        if root.drag-from < 0 { return 0; }
+        if index == root.drag-from { return root.drag-offset; }
+        if root.drag-from < root.drag-to && index > root.drag-from && index <= root.drag-to { return -Style.popup-row-height; }
+        if root.drag-from > root.drag-to && index >= root.drag-to && index < root.drag-from { return Style.popup-row-height; }
+        return 0;
+    }
 
     function close-picker() {
         root.picking = false;
@@ -451,6 +524,15 @@ export component Panel inherits Window {
         FocusScope {
             capture-key-pressed(event) => {
                 if event.text == Key.Escape { root.close-picker(); return accept; }
+                // Slint gives macOS's ⌘ as control; Ctrl+arrows belong to Mission Control.
+                if event.modifiers.control && event.text == Key.UpArrow {
+                    if root.cursor > 0 && root.cursor < root.movable { root.move-area(root.cursor, root.cursor - 1); root.cursor -= 1; }
+                    return accept;
+                }
+                if event.modifiers.control && event.text == Key.DownArrow {
+                    if root.cursor >= 0 && root.cursor < root.movable - 1 { root.move-area(root.cursor, root.cursor + 1); root.cursor += 1; }
+                    return accept;
+                }
                 if event.text == Key.UpArrow { root.cursor = max(-1, root.cursor - 1); return accept; }
                 if event.text == Key.DownArrow { root.cursor = min(root.choices.length - 1, root.cursor + 1); return accept; }
                 if event.text == Key.Return {
@@ -490,66 +572,92 @@ export component Panel inherits Window {
                     }
                 }
                 Rectangle { height: 1px; background: Theme.text.with-alpha(0.10); }
+                // Each row keeps its slot in the list; what shows moves inside it, so
+                // that a drag can shift it without changing the layout.
                 for choice[index] in root.choices: Rectangle {
                     height: choice.detail == "" ? Style.popup-row-height : Style.popup-row-height + Style.row-padding-x;
-                    background: index == root.cursor ? Theme.text.with-alpha(0.08)
-                        : index == root.selected ? Theme.text.with-alpha(0.18) : transparent;
-                    VerticalLayout {
-                        padding-left: Style.row-padding-x;
-                        padding-right: Style.row-padding-x;
-                        alignment: center;
-                        Text { text: choice.title; color: Theme.text; font-size: Style.body; overflow: elide; }
-                        if choice.detail != "": Text { text: choice.detail; color: Theme.dim; font-size: Style.caption; overflow: elide; }
-                    }
+                    z: index == root.drag-from ? 1 : 0;
+                    // In the slot, which stays put: inside the moving row the pointer would
+                    // be measured from a place that moves with it, and the row would shake.
                     TouchArea {
                         // Not `pointer`: inside Panel that name is the chart's touch area.
                         mouse-cursor: MouseCursor.pointer;
                         // The mouse and the keyboard share one cursor, as in Omarchy.
-                        changed has-hover => { if self.has-hover { root.cursor = index; } }
-                        clicked => { root.pick(index); }
-                    }
-                    // A pencil drawn like the ×, to its left: the map with this area's marks.
-                    if choice.editable && index == root.cursor: Rectangle {
-                        x: parent.width - Style.row-padding-x - self.width - (choice.removable ? 24px : 0px);
-                        y: (parent.height - self.height) / 2;
-                        width: 20px;
-                        height: 20px;
-                        Path {
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            width: 11px;
-                            height: 11px;
-                            viewbox-width: 11;
-                            viewbox-height: 11;
-                            commands: "M 1 10 L 1.5 7.5 L 8 1 L 10 3 L 3.5 9.5 Z M 6.5 2.5 L 8.5 4.5";
-                            stroke: pencil.has-hover ? Theme.text : Theme.dim;
-                            stroke-width: 1.2px;
+                        changed has-hover => { if self.has-hover && root.drag-from < 0 { root.cursor = index; } }
+                        pointer-event(event) => {
+                            if event.kind == PointerEventKind.down { root.press-dragged = false; }
+                            if event.kind == PointerEventKind.up { root.drop(); }
                         }
-                        pencil := TouchArea {
-                            mouse-cursor: MouseCursor.pointer;
-                            clicked => {
-                                root.close-picker();
-                                root.edit(index);
+                        moved => { if self.pressed { root.drag(index, self.mouse-y - self.pressed-y); } }
+                        // A press that became a drag is not a pick.
+                        clicked => { if !root.press-dragged { root.pick(index); } }
+                    }
+                    Rectangle {
+                        y: root.shift(index);
+                        // The rows that make room glide, as in Omarchy; the dragged one
+                        // follows the pointer at once, and glides only into its slot.
+                        animate y {
+                            duration: root.settling || (index == root.drag-from && !root.dropping) ? 0ms : 120ms;
+                            easing: ease-out;
+                        }
+                        width: 100%;
+                        height: 100%;
+                        // Opaque while dragged, so the rows under it do not show through.
+                        background: index == root.drag-from ? Theme.background : transparent;
+                        Rectangle {
+                            background: index == root.cursor || index == root.drag-from ? Theme.text.with-alpha(0.08)
+                                : index == root.selected ? Theme.text.with-alpha(0.18) : transparent;
+                        }
+                        VerticalLayout {
+                            padding-left: Style.row-padding-x;
+                            padding-right: Style.row-padding-x;
+                            alignment: center;
+                            Text { text: choice.title; color: Theme.text; font-size: Style.body; overflow: elide; }
+                            if choice.detail != "": Text { text: choice.detail; color: Theme.dim; font-size: Style.caption; overflow: elide; }
+                        }
+                        // A pencil drawn like the ×, to its left: the map with this area's marks.
+                        if choice.editable && index == root.cursor: Rectangle {
+                            x: parent.width - Style.row-padding-x - self.width - (choice.removable ? 24px : 0px);
+                            y: (parent.height - self.height) / 2;
+                            width: 20px;
+                            height: 20px;
+                            Path {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                width: 11px;
+                                height: 11px;
+                                viewbox-width: 11;
+                                viewbox-height: 11;
+                                commands: "M 1 10 L 1.5 7.5 L 8 1 L 10 3 L 3.5 9.5 Z M 6.5 2.5 L 8.5 4.5";
+                                stroke: pencil.has-hover ? Theme.text : Theme.dim;
+                                stroke-width: 1.2px;
+                            }
+                            pencil := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
+                                clicked => {
+                                    root.close-picker();
+                                    root.edit(index);
+                                }
                             }
                         }
-                    }
-                    // The × of Omarchy's world clock, without its circle, only on the row
-                    // under the cursor. The 20 px box is there to be easy to hit.
-                    if choice.removable && index == root.cursor: Rectangle {
-                        x: parent.width - Style.row-padding-x - self.width;
-                        y: (parent.height - self.height) / 2;
-                        width: 20px;
-                        height: 20px;
-                        Text {
-                            text: "×";
-                            color: cross.has-hover ? Theme.text : Theme.dim;
-                            font-size: Style.title;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-                        cross := TouchArea {
-                            mouse-cursor: MouseCursor.pointer;
-                            clicked => { root.remove(index); }
+                        // The × of Omarchy's world clock, without its circle, only on the row
+                        // under the cursor. The 20 px box is there to be easy to hit.
+                        if choice.removable && index == root.cursor: Rectangle {
+                            x: parent.width - Style.row-padding-x - self.width;
+                            y: (parent.height - self.height) / 2;
+                            width: 20px;
+                            height: 20px;
+                            Text {
+                                text: "×";
+                                color: cross.has-hover ? Theme.text : Theme.dim;
+                                font-size: Style.title;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            cross := TouchArea {
+                                mouse-cursor: MouseCursor.pointer;
+                                clicked => { root.remove(index); }
+                            }
                         }
                     }
                 }
