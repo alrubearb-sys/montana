@@ -306,8 +306,11 @@ export component Panel inherits Window {
             root.drag-to = index;
             root.press-dragged = true;
         }
-        root.drag-offset = offset;
-        let raw = offset / Style.popup-row-height;
+        // It stops at the first and the last area instead of leaving the list.
+        let highest = -root.drag-from * Style.popup-row-height;
+        let lowest = (root.movable - 1 - root.drag-from) * Style.popup-row-height;
+        root.drag-offset = max(highest, min(lowest, offset));
+        let raw = root.drag-offset / Style.popup-row-height;
         let held = root.drag-to - root.drag-from;
         let next = abs(raw - held) >= 0.6 ? round(raw) : held;
         root.drag-to = max(0, min(root.movable - 1, root.drag-from + next));
