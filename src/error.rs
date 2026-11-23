@@ -7,6 +7,7 @@ pub enum Error {
     AlreadySaved(String),
     BadCoordinates(String),
     BadFile(PathBuf, serde_json::Error),
+    BadVersion(String),
     File(PathBuf, io::Error),
     LastArea(String),
     MissingData(&'static str),
@@ -27,6 +28,7 @@ impl fmt::Display for Error {
             Error::AlreadySaved(name) => write!(f, "there is already an area called {name}"),
             Error::BadCoordinates(text) => write!(f, "cannot read the coordinates: {text}"),
             Error::BadFile(path, source) => write!(f, "cannot read {}: {source}", path.display()),
+            Error::BadVersion(text) => write!(f, "cannot read the version {text}"),
             Error::File(path, source) => write!(f, "cannot access {}: {source}", path.display()),
             Error::LastArea(name) => write!(
                 f,
@@ -59,6 +61,7 @@ impl std::error::Error for Error {
             Error::Network(source) => Some(source),
             Error::AlreadySaved(_)
             | Error::BadCoordinates(_)
+            | Error::BadVersion(_)
             | Error::LastArea(_)
             | Error::MissingData(_)
             | Error::MissingHome

@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
-use crate::data::forecast;
+use crate::data::{forecast, release};
 use crate::error::Error;
 use crate::model::{Area, UnixTime};
 use crate::output::{Report, SearchResults};
@@ -94,6 +94,8 @@ enum Command {
     },
     /// Print what the panels show for an area, as JSON
     Panel { area: String },
+    /// Print the newest version if there is one; nothing if this one is the newest
+    Outdated,
     /// List the areas
     Areas {
         /// Print the names as JSON
@@ -140,6 +142,7 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
         (Some(Command::Order { name, position }), _) => order(out, &name, position.into()),
         (Some(Command::Panel { area }), _) => show_panel(out, &area),
         (Some(Command::Areas { json }), _) => list(out, json),
+        (Some(Command::Outdated), _) => outdated(out),
         (None, Some(area)) if cli.json => show_json(out, &area),
         (None, Some(area)) => show(out, &area),
         (None, None) => Ok(()),
@@ -215,6 +218,15 @@ fn move_area(
     output::print_point(out, "Summit", area.summit)?;
     if let Some(base) = area.base {
         output::print_point(out, "Base", base)?;
+    }
+    Ok(())
+}
+
+// Nothing printed means up to date, so that the panels only have to read the output.
+fn outdated(out: &mut impl Write) -> Result<(), Error> {
+    let latest = release::latest()?;
+    if latest > release::Version::this()? {
+        writeln!(out, "{latest}")?;
     }
     Ok(())
 }
