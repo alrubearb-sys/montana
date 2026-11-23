@@ -85,6 +85,13 @@ enum Command {
         #[arg(long)]
         rename: Option<String>,
     },
+    /// Move an area to a place in the list; the first one is the default
+    Order {
+        name: String,
+        /// Place in the list, counting from 1
+        #[arg(value_parser = clap::value_parser!(u16).range(1..))]
+        position: u16,
+    },
     /// Print what the panels show for an area, as JSON
     Panel { area: String },
     /// List the areas
@@ -130,6 +137,7 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
             }),
             _,
         ) => create(out, &name, kind, summit, base),
+        (Some(Command::Order { name, position }), _) => order(out, &name, position.into()),
         (Some(Command::Panel { area }), _) => show_panel(out, &area),
         (Some(Command::Areas { json }), _) => list(out, json),
         (None, Some(area)) if cli.json => show_json(out, &area),
@@ -170,6 +178,12 @@ fn add(out: &mut impl Write, text: &str, chosen: usize, name: Option<String>) ->
 fn remove(out: &mut impl Write, name: &str) -> Result<(), Error> {
     let area = areas::remove(name)?;
     writeln!(out, "Removed: {}", area.name)?;
+    Ok(())
+}
+
+fn order(out: &mut impl Write, name: &str, position: usize) -> Result<(), Error> {
+    let position = areas::reorder(name, position)?;
+    writeln!(out, "Moved {name} to place {position}")?;
     Ok(())
 }
 

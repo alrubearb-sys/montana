@@ -43,6 +43,26 @@ fn without(mut areas: Vec<Area>, name: &str) -> Result<(Vec<Area>, Area), Error>
     Ok((areas, removed))
 }
 
+/// Puts an area at `position`, counting from 1; the first one is the default.
+pub fn reorder(name: &str, position: usize) -> Result<usize, Error> {
+    let (areas, position) = moved(all()?, name, position)?;
+    storage::save_areas(&areas)?;
+    Ok(position)
+}
+
+// A position past the end puts the area last.
+fn moved(mut areas: Vec<Area>, name: &str, position: usize) -> Result<(Vec<Area>, usize), Error> {
+    let wanted = name.to_lowercase();
+    let index = areas
+        .iter()
+        .position(|area| area.name.to_lowercase() == wanted)
+        .ok_or_else(|| Error::UnknownArea(name.to_string()))?;
+    let area = areas.remove(index);
+    let at = position.clamp(1, areas.len() + 1) - 1;
+    areas.insert(at, area);
+    Ok((areas, at + 1))
+}
+
 pub fn find(name: &str) -> Result<Area, Error> {
     let wanted = name.to_lowercase();
     let found = all()?
@@ -250,6 +270,26 @@ mod tests {
 
         assert_eq!(kept, [named("Aneto")]);
         assert_eq!(removed.name, "Säntis");
+    }
+
+    #[test]
+    fn moves_an_area_to_a_position() {
+        let areas = vec![named("Säntis"), named("Aneto"), named("Bödele")];
+
+        let (moved_up, position) = moved(areas.clone(), "bödele", 1).unwrap();
+        let (moved_down, last) = moved(areas.clone(), "Säntis", 9).unwrap();
+
+        assert_eq!(moved_up, [named("Bödele"), named("Säntis"), named("Aneto")]);
+        assert_eq!(position, 1);
+        assert_eq!(
+            moved_down,
+            [named("Aneto"), named("Bödele"), named("Säntis")]
+        );
+        assert_eq!(last, 3);
+        assert!(matches!(
+            moved(areas, "Mont Blanc", 1),
+            Err(Error::UnknownArea(_))
+        ));
     }
 
     #[test]

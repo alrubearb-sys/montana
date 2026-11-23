@@ -36,6 +36,7 @@ peakcast add Säntis                    # save it as an area
 peakcast areas                         # list your areas
 peakcast Säntis                        # its forecast
 peakcast panel Säntis                  # what the panels show, as JSON
+peakcast order Säntis 1                # move it to the top: the default area
 peakcast move Säntis --summit 47.2494,9.3432 --base 47.2583,9.3622
 peakcast remove Säntis
 ```
