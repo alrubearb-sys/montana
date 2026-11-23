@@ -160,13 +160,10 @@ fn daylight(forecast: &Forecast, now: i64) -> String {
         .iter()
         .find(|day| clock::day(day.sunrise, offset) == clock::day(now, offset))
         .map_or(String::new(), |day| {
-            let minutes = (day.sunset - day.sunrise) / 60;
             format!(
-                "{} - {}  ({} h {:02})",
+                "{} - {}",
                 clock::clock(day.sunrise, offset),
-                clock::clock(day.sunset, offset),
-                minutes / 60,
-                minutes % 60
+                clock::clock(day.sunset, offset)
             )
         })
 }
@@ -480,7 +477,7 @@ mod tests {
         assert_eq!(view.spots[0].wind, "30 km/h");
         assert_eq!(view.snow_line, "-");
         assert_eq!(view.snow_depth, "14 cm");
-        assert_eq!(view.daylight, "07:35 - 16:38  (9 h 03)");
+        assert_eq!(view.daylight, "07:35 - 16:38");
         assert_eq!(
             view.readings[0],
             "Sun 14:00  0 °C  wind 30 km/h  snow 1.5 mm"
