@@ -39,6 +39,10 @@ global Style {
     out property <length> label-gap: 4px;
     out property <length> control-padding-x: 10px;
     out property <length> control-padding-y: 6px;
+    out property <length> control-gap: 8px;
+    out property <length> control-height: 28px;
+    out property <length> popup-row-height: 28px;
+    out property <length> row-padding-x: 12px;
 }
 
 global Theme {
@@ -85,6 +89,37 @@ component Button inherits Rectangle {
         padding-top: Style.control-padding-y;
         padding-bottom: Style.control-padding-y;
         Text { text: root.text; color: Theme.text; font-size: Style.body; vertical-alignment: center; horizontal-alignment: center; }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Omarchy's dropdown trigger: control chrome, the current choice and a chevron.
+component Picker inherits Rectangle {
+    in property <string> text;
+    in property <bool> open;
+    callback clicked;
+    height: Style.control-height;
+    background: Theme.text.with-alpha(touch.pressed ? 0.22 : touch.has-hover || root.open ? 0.08 : 0.04);
+    border-width: 1px;
+    border-color: Theme.text.with-alpha(touch.has-hover || root.open ? 0.25 : 0.4);
+    HorizontalLayout {
+        padding-left: Style.control-padding-x;
+        padding-right: Style.control-gap;
+        spacing: Style.control-gap;
+        Text { text: root.text; color: Theme.border; font-size: Style.heading; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+        Path {
+            width: 10px;
+            height: 6px;
+            y: (parent.height - self.height) / 2;
+            viewbox-width: 10;
+            viewbox-height: 6;
+            commands: "M 1 1 L 5 5 L 9 1";
+            stroke: Theme.text;
+            stroke-width: 1.5px;
+        }
     }
     touch := TouchArea {
         mouse-cursor: pointer;
@@ -190,7 +225,9 @@ export component Panel inherits Window {
     in property <Chart> wind;
     in property <Chart> precipitation;
     in property <[string]> readings;
-    in property <bool> several;
+    in property <[string]> areas;
+    in property <int> selected;
+    callback choose(int);
     callback previous;
     callback next;
     callback refresh;
@@ -198,6 +235,13 @@ export component Panel inherits Window {
     callback quit;
     property <int> hours: readings.length;
     property <int> hovered: -1;
+    property <bool> picking;
+    property <int> cursor;
+
+    function pick(index: int) {
+        root.picking = false;
+        root.choose(index);
+    }
 
     // A few times per second is enough: every redraw costs battery.
     Timer {
@@ -211,7 +255,8 @@ export component Panel inherits Window {
     title: "montana";
     icon: @image-url("mountain-white.svg");
     width: 440px;
-    height: 748px;
+    // At least the content, so the bottom margin is never eaten.
+    height: max(760px, content.preferred-height);
     no-frame: true;
     always-on-top: true;
     background: Theme.background;
@@ -220,6 +265,13 @@ export component Panel inherits Window {
 
     keys := FocusScope {
         key-pressed(event) => {
+            if root.picking {
+                if event.text == Key.Escape { root.picking = false; return accept; }
+                if event.text == Key.UpArrow { root.cursor = max(0, root.cursor - 1); return accept; }
+                if event.text == Key.DownArrow { root.cursor = min(root.areas.length - 1, root.cursor + 1); return accept; }
+                if event.text == Key.Return { root.pick(root.cursor); return accept; }
+                return reject;
+            }
             if event.text == Key.Escape { root.dismiss(); return accept; }
             if event.text == Key.LeftArrow { root.previous(); return accept; }
             if event.text == Key.RightArrow { root.next(); return accept; }
@@ -231,15 +283,21 @@ export component Panel inherits Window {
         border-width: 2px;
         border-color: Theme.border;
 
-        VerticalLayout {
+        content := VerticalLayout {
             padding: Style.panel-padding;
             spacing: Style.row-gap;
 
             HorizontalLayout {
                 spacing: Style.row-gap;
-                if root.several: Button { text: "<"; clicked => { root.previous(); } }
-                Text { text: root.area; color: Theme.border; font-size: Style.heading; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                if root.several: Button { text: ">"; clicked => { root.next(); } }
+                trigger := Picker {
+                    text: root.area;
+                    open: root.picking;
+                    horizontal-stretch: 1;
+                    clicked => {
+                        root.cursor = root.selected;
+                        root.picking = !root.picking;
+                    }
+                }
                 Text { text: root.daylight; color: Theme.sun; font-size: Style.body; vertical-alignment: center; }
             }
             Separator { }
@@ -305,6 +363,48 @@ export component Panel inherits Window {
                 Button { text: "quit"; clicked => { root.quit(); } }
             }
             Label { text: "Weather data by Open-Meteo (CC BY 4.0). Made with Slint."; font-size: Style.caption; }
+        }
+    }
+
+    // Above everything else; a click outside the list closes it.
+    if root.picking: TouchArea {
+        clicked => { root.picking = false; }
+    }
+    if root.picking: Rectangle {
+        x: trigger.absolute-position.x - root.absolute-position.x;
+        y: trigger.absolute-position.y - root.absolute-position.y + trigger.height + Style.label-gap;
+        width: trigger.width;
+        height: root.areas.length * Style.popup-row-height + 4px;
+        background: Theme.background;
+        border-width: 2px;
+        border-color: Theme.border;
+        VerticalLayout {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            for name[index] in root.areas: Rectangle {
+                height: Style.popup-row-height;
+                background: index == root.cursor ? Theme.text.with-alpha(0.08)
+                    : index == root.selected ? Theme.text.with-alpha(0.18) : transparent;
+                Text {
+                    x: Style.row-padding-x;
+                    width: parent.width - 2 * Style.row-padding-x;
+                    height: 100%;
+                    text: name;
+                    color: Theme.text;
+                    font-size: Style.body;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                TouchArea {
+                    // Not `pointer`: inside Panel that name is the chart's touch area.
+                    mouse-cursor: MouseCursor.pointer;
+                    // The mouse and the keyboard share one cursor, as in Omarchy.
+                    changed has-hover => { if self.has-hover { root.cursor = index; } }
+                    clicked => { root.pick(index); }
+                }
+            }
         }
     }
 }

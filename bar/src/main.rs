@@ -12,7 +12,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
-use slint::{ComponentHandle, LogicalPosition, PlatformError, Timer};
+use slint::{ComponentHandle, LogicalPosition, PlatformError, SharedString, Timer};
 
 use crate::engine::{Error, Report};
 
@@ -97,6 +97,11 @@ fn select_backend() -> Result<(), PlatformError> {
 fn connect(panel: &Panel) {
     panel.on_previous(|| with_app(|app| app.move_selection(-1)));
     panel.on_next(|| with_app(|app| app.move_selection(1)));
+    panel.on_choose(|index| {
+        if let Ok(index) = usize::try_from(index) {
+            with_app(|app| app.select(index));
+        }
+    });
     panel.on_refresh(|| with_app(App::fetch));
     panel.on_dismiss(|| with_app(App::close));
     panel.on_quit(|| {
@@ -183,7 +188,13 @@ impl App {
         let total = self.areas.borrow().len();
         if total > 1 {
             let next = if step < 0 { total - 1 } else { 1 };
-            self.selected.set((self.selected.get() + next) % total);
+            self.select((self.selected.get() + next) % total);
+        }
+    }
+
+    fn select(&self, index: usize) {
+        if index < self.areas.borrow().len() {
+            self.selected.set(index);
             self.problem.take();
             self.show_selected();
             self.refresh_if_old();
@@ -268,7 +279,14 @@ impl App {
             return;
         };
         panel.set_area(area.as_str().into());
-        panel.set_several(self.areas.borrow().len() > 1);
+        let names: Vec<SharedString> = self
+            .areas
+            .borrow()
+            .iter()
+            .map(|name| name.as_str().into())
+            .collect();
+        panel.set_areas(view::model(names));
+        panel.set_selected(i32::try_from(self.selected.get()).unwrap_or(0));
         let loading = self.loading.borrow().as_ref() == Some(&area);
         let reports = self.reports.borrow();
         let updated = match reports.get(&area) {
