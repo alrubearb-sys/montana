@@ -63,6 +63,17 @@ pub fn create(
     execute(&arguments).map(|_| ())
 }
 
+pub fn move_area(area: &str, summit: (f64, f64), base: Option<(f64, f64)>) -> Result<(), Error> {
+    let summit = degrees(summit);
+    let base = base.map(degrees);
+    let mut arguments = vec!["move", "--summit", &summit];
+    if let Some(base) = &base {
+        arguments.extend(["--base", base]);
+    }
+    arguments.extend(["--", area]);
+    execute(&arguments).map(|_| ())
+}
+
 fn degrees((latitude, longitude): (f64, f64)) -> String {
     format!("{latitude:.6},{longitude:.6}")
 }

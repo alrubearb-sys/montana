@@ -23,7 +23,8 @@ use crate::engine::Place;
 const CANCELLED: u8 = 2;
 const START_ZOOM: f64 = 14.0;
 const PLACE_ZOOM: f64 = 14.0;
-const USAGE: &str = "usage: montana-map <latitude,longitude of where to start>";
+const USAGE: &str = "usage: montana-map <latitude,longitude of where to start>
+       montana-map --edit <area> <summit latitude,longitude> [<base latitude,longitude>]";
 
 // Omarchy's Tokyo Night roles, as in the panel.
 const BACKGROUND: Color32 = Color32::from_rgb(0x1a, 0x1b, 0x26);
@@ -45,8 +46,22 @@ const ROW_HEIGHT: f32 = 28.0;
 const ROW_PADDING: f32 = 12.0;
 const GAP: f32 = 8.0;
 
-struct Args {
-    center: (f64, f64),
+enum Args {
+    Create {
+        center: (f64, f64),
+    },
+    Edit {
+        area: String,
+        summit: (f64, f64),
+        base: Option<(f64, f64)>,
+    },
+}
+
+// What Save does: a new area with a name, or new points for a saved one.
+#[derive(Clone, Copy, PartialEq)]
+enum Task {
+    Create,
+    Edit,
 }
 
 enum Message {
@@ -54,8 +69,8 @@ enum Message {
     Saved(Result<(), engine::Error>),
 }
 
-// A new area: no marks until they are clicked, and a name to save it with.
 struct MapApp {
+    task: Task,
     tiles: HttpTiles,
     memory: MapMemory,
     start: Position,
@@ -99,9 +114,13 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Args, saved: Rc<RefCell<Option<String>>>) -> eframe::Result {
+    let title = match &args {
+        Args::Create { .. } => String::from("New area · montana"),
+        Args::Edit { area, .. } => format!("Edit · {area} · montana"),
+    };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("New area · montana")
+            .with_title(title)
             .with_inner_size([900.0, 640.0]),
         ..eframe::NativeOptions::default()
     };
@@ -116,9 +135,18 @@ fn run(args: Args, saved: Rc<RefCell<Option<String>>>) -> eframe::Result {
 }
 
 fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
-    let center = args.next().ok_or("missing where to start")?;
-    Ok(Args {
-        center: coordinates(&center)?,
+    let first = args.next().ok_or("missing where to start")?;
+    if first != "--edit" {
+        return Ok(Args::Create {
+            center: coordinates(&first)?,
+        });
+    }
+    let area = args.next().ok_or("missing the area")?;
+    let summit = args.next().ok_or("missing the summit")?;
+    Ok(Args::Edit {
+        area,
+        summit: coordinates(&summit)?,
+        base: args.next().map(|base| coordinates(&base)).transpose()?,
     })
 }
 
@@ -151,13 +179,25 @@ impl MapApp {
         // Only fails outside the zoom levels the map knows.
         let _ = memory.set_zoom(START_ZOOM);
         let (sender, receiver) = mpsc::channel();
+        // A new area starts with no marks; a saved one with its own.
+        let (task, start, summit, base, name) = match args {
+            Args::Create { center } => (Task::Create, position(center), None, None, String::new()),
+            Args::Edit { area, summit, base } => (
+                Task::Edit,
+                position(summit),
+                Some(position(summit)),
+                base.map(position),
+                area,
+            ),
+        };
         Self {
+            task,
             tiles: HttpTiles::with_options(OpenTopoMap(OpenTopoServer::A), options, ctx),
             memory,
-            start: position(args.center),
-            summit: None,
-            base: None,
-            name: String::new(),
+            start,
+            summit,
+            base,
+            name,
             kind: None,
             typed: String::new(),
             places: Vec::new(),
@@ -210,7 +250,11 @@ impl MapApp {
     }
 
     fn ready(&self) -> bool {
-        self.summit.is_some() && !self.name.trim().is_empty() && !self.saving
+        let named = match self.task {
+            Task::Create => !self.name.trim().is_empty(),
+            Task::Edit => true,
+        };
+        self.summit.is_some() && named && !self.saving
     }
 
     fn save(&mut self, ctx: &egui::Context) {
@@ -221,24 +265,30 @@ impl MapApp {
         self.problem.clear();
         let name = self.name.trim().to_string();
         let kind = self.kind.clone();
+        let task = self.task;
         let summit = degrees(summit);
         let base = self.base.map(degrees);
         let sender = self.sender.clone();
         let ctx = ctx.clone();
         thread::spawn(move || {
-            let created = engine::create(&name, kind.as_deref(), summit, base);
-            let _ = sender.send(Message::Saved(created));
+            let saved = match task {
+                Task::Create => engine::create(&name, kind.as_deref(), summit, base),
+                Task::Edit => engine::move_area(&name, summit, base),
+            };
+            let _ = sender.send(Message::Saved(saved));
             ctx.request_repaint();
         });
     }
 
-    // The place found also names the area, which can still be changed.
+    // For a new area, the place found also names it; the name can still be changed.
     fn go_to(&mut self, place: &Place) {
         self.memory
             .center_at(position((place.latitude, place.longitude)));
         let _ = self.memory.set_zoom(PLACE_ZOOM);
-        self.name = place.name.clone();
-        self.kind = Some(place.kind.clone());
+        if self.task == Task::Create {
+            self.name = place.name.clone();
+            self.kind = Some(place.kind.clone());
+        }
         self.places.clear();
         self.searched = false;
     }
@@ -321,18 +371,21 @@ impl MapApp {
                 }
                 ui.horizontal(|ui| {
                     // Drawn like the buttons beside it, so the three read as one row.
-                    egui::Frame::NONE
-                        .fill(translucent(mix(0.04), SEE_THROUGH))
-                        .stroke(Stroke::new(1.0, translucent(FOREGROUND, 0.4)))
-                        .inner_margin(egui::Margin::symmetric(10, 6))
-                        .show(ui, |ui| {
-                            ui.add(
-                                TextEdit::singleline(&mut self.name)
-                                    .hint_text("Name")
-                                    .frame(egui::Frame::NONE)
-                                    .desired_width(200.0),
-                            );
-                        });
+                    // Editing keeps the name, so there is nothing to type.
+                    if self.task == Task::Create {
+                        egui::Frame::NONE
+                            .fill(translucent(mix(0.04), SEE_THROUGH))
+                            .stroke(Stroke::new(1.0, translucent(FOREGROUND, 0.4)))
+                            .inner_margin(egui::Margin::symmetric(10, 6))
+                            .show(ui, |ui| {
+                                ui.add(
+                                    TextEdit::singleline(&mut self.name)
+                                        .hint_text("Name")
+                                        .frame(egui::Frame::NONE)
+                                        .desired_width(200.0),
+                                );
+                            });
+                    }
                     if ui.button("Cancel").clicked() {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                     }
@@ -563,15 +616,41 @@ mod tests {
     }
 
     #[test]
-    fn starts_where_it_is_told() {
-        assert_eq!(args(&["47.4031,9.8132"]).unwrap().center, (47.4031, 9.8132));
-        assert_eq!(args(&["40.4,-3.7"]).unwrap().center, (40.4, -3.7));
+    fn a_new_area_starts_where_it_is_told() {
+        assert!(matches!(
+            args(&["40.4,-3.7"]),
+            Ok(Args::Create {
+                center: (40.4, -3.7)
+            })
+        ));
+    }
+
+    #[test]
+    fn editing_brings_the_area_and_its_points() {
+        let read = args(&[
+            "--edit",
+            "Bödele ski resort",
+            "47.4031,9.8132",
+            "47.4178,9.8182",
+        ]);
+
+        let Ok(Args::Edit { area, summit, base }) = read else {
+            panic!("not an edit");
+        };
+        assert_eq!(area, "Bödele ski resort");
+        assert_eq!(summit, (47.4031, 9.8132));
+        assert_eq!(base, Some((47.4178, 9.8182)));
+        assert!(matches!(
+            args(&["--edit", "Lachen", "47.41,9.35"]),
+            Ok(Args::Edit { base: None, .. })
+        ));
     }
 
     #[test]
     fn rejects_missing_or_bad_points() {
         assert!(args(&[]).is_err());
         assert!(args(&["north"]).is_err());
+        assert!(args(&["--edit", "Lachen"]).is_err());
     }
 
     #[test]
