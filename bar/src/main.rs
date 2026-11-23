@@ -12,9 +12,9 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
-use slint::{ComponentHandle, LogicalPosition, PlatformError, SharedString, Timer};
+use slint::{ComponentHandle, LogicalPosition, PlatformError, Timer};
 
-use crate::engine::{Error, Report};
+use crate::engine::{Error, Place, Report};
 
 slint::slint! {
     #[edition = "1.19"]
@@ -36,6 +36,11 @@ struct App {
     tray: Tray,
     areas: RefCell<Vec<String>>,
     selected: Cell<usize>,
+    // The area picker: saved areas that match what was typed, then places found.
+    matches: RefCell<Vec<usize>>,
+    found: RefCell<Vec<Place>>,
+    searched: RefCell<String>,
+    searching: Cell<bool>,
     reports: RefCell<HashMap<String, Saved>>,
     loading: RefCell<Option<String>>,
     problem: RefCell<String>,
@@ -65,6 +70,10 @@ fn run() -> Result<(), PlatformError> {
         tray: Tray::new()?,
         areas: RefCell::default(),
         selected: Cell::new(0),
+        matches: RefCell::default(),
+        found: RefCell::default(),
+        searched: RefCell::default(),
+        searching: Cell::new(false),
         reports: RefCell::default(),
         loading: RefCell::default(),
         problem: RefCell::default(),
@@ -99,9 +108,11 @@ fn connect(panel: &Panel) {
     panel.on_next(|| with_app(|app| app.move_selection(1)));
     panel.on_choose(|index| {
         if let Ok(index) = usize::try_from(index) {
-            with_app(|app| app.select(index));
+            with_app(|app| app.choose(index));
         }
     });
+    panel.on_edited(|text| with_app(|app| app.filter(&text)));
+    panel.on_search(|text| with_app(|app| app.search(&text)));
     panel.on_refresh(|| with_app(App::fetch));
     panel.on_dismiss(|| with_app(App::close));
     panel.on_quit(|| {
@@ -150,7 +161,7 @@ impl App {
         // The window exists for macOS only after the event loop has turned.
         Timer::single_shot(Duration::ZERO, || with_app(App::focus));
         self.show_selected();
-        self.reload_areas();
+        self.reload_areas(None);
         Ok(())
     }
 
@@ -205,13 +216,75 @@ impl App {
         self.areas.borrow().get(self.selected.get()).cloned()
     }
 
-    fn reload_areas(&self) {
-        in_background(engine::areas, |app, result| match result {
+    fn filter(&self, typed: &str) {
+        self.matches
+            .replace(view::matching(&self.areas.borrow(), typed));
+        self.found.borrow_mut().clear();
+        self.searched.borrow_mut().clear();
+        self.show_choices();
+    }
+
+    fn search(&self, text: &str) {
+        if self.searching.get() {
+            return;
+        }
+        self.searching.set(true);
+        self.searched.replace(text.to_string());
+        self.show_choices();
+        let typed = text.to_string();
+        in_background(
+            move || engine::search(&typed),
+            |app, result| {
+                app.searching.set(false);
+                match result {
+                    Ok(places) => {
+                        app.found.replace(places);
+                        app.problem.take();
+                        app.show_selected();
+                    }
+                    Err(error) => app.report_problem(&error),
+                }
+            },
+        );
+    }
+
+    fn choose(&self, index: usize) {
+        let saved = self.matches.borrow().get(index).copied();
+        if let Some(area) = saved {
+            self.select(area);
+            return;
+        }
+        let number = index - self.matches.borrow().len();
+        let Some(place) = self.found.borrow().get(number).cloned() else {
+            return;
+        };
+        let known = self
+            .areas
+            .borrow()
+            .iter()
+            .position(|area| area.to_lowercase() == place.name.to_lowercase());
+        if let Some(area) = known {
+            self.select(area);
+            return;
+        }
+        let text = self.searched.borrow().clone();
+        in_background(
+            move || engine::add(&text, number + 1),
+            move |app, result| match result {
+                Ok(()) => app.reload_areas(Some(place.name)),
+                Err(error) => app.report_problem(&error),
+            },
+        );
+    }
+
+    fn reload_areas(&self, wanted: Option<String>) {
+        in_background(engine::areas, move |app, result| match result {
             Ok(areas) => {
-                let previous = app.selected_area();
+                let previous = wanted.or_else(|| app.selected_area());
                 let index = areas
                     .iter()
                     .position(|area| Some(area) == previous.as_ref());
+                app.matches.replace((0..areas.len()).collect());
                 app.areas.replace(areas);
                 app.selected.set(index.unwrap_or(0));
                 app.show_selected();
@@ -279,14 +352,7 @@ impl App {
             return;
         };
         panel.set_area(area.as_str().into());
-        let names: Vec<SharedString> = self
-            .areas
-            .borrow()
-            .iter()
-            .map(|name| name.as_str().into())
-            .collect();
-        panel.set_areas(view::model(names));
-        panel.set_selected(i32::try_from(self.selected.get()).unwrap_or(0));
+
         let loading = self.loading.borrow().as_ref() == Some(&area);
         let reports = self.reports.borrow();
         let updated = match reports.get(&area) {
@@ -302,6 +368,25 @@ impl App {
         };
         let updated = if loading { "Updating" } else { &updated };
         panel.set_updated(updated.into());
+        self.show_choices();
+    }
+
+    fn show_choices(&self) {
+        let panel = self.panel.borrow();
+        let Some(panel) = panel.as_ref() else {
+            return;
+        };
+        let areas = self.areas.borrow();
+        let matches = self.matches.borrow();
+        let choices = view::choices(&areas, &matches, &self.found.borrow());
+        panel.set_choices(view::model(choices));
+        let selected = matches
+            .iter()
+            .position(|&area| area == self.selected.get())
+            .and_then(|index| i32::try_from(index).ok())
+            .unwrap_or(-1);
+        panel.set_selected(selected);
+        panel.set_searching(self.searching.get());
     }
 }
 

@@ -21,6 +21,18 @@ pub struct Forecast {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct Place {
+    pub name: String,
+    pub description: String,
+    pub elevation: Option<f64>,
+}
+
+#[derive(Deserialize)]
+struct SearchResults {
+    places: Vec<Place>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Point {
     pub elevation: f64,
 }
@@ -146,14 +158,28 @@ pub fn report(area: &str) -> Result<Report, Error> {
     run(&["--json", "--", area])
 }
 
-// A separate process, so that the memory of the network connection is given back.
+pub fn search(text: &str) -> Result<Vec<Place>, Error> {
+    run::<SearchResults>(&["search", "--json", "--", text]).map(|results| results.places)
+}
+
+// `number` counts from 1, as in `montana search`. The search is cached, so this
+// does not ask Nominatim again.
+pub fn add(text: &str, number: usize) -> Result<(), Error> {
+    execute(&["add", "--result", &number.to_string(), "--", text]).map(|_| ())
+}
+
 fn run<T: DeserializeOwned>(arguments: &[&str]) -> Result<T, Error> {
+    serde_json::from_slice(&execute(arguments)?).map_err(Error::BadData)
+}
+
+// A separate process, so that the memory of the network connection is given back.
+fn execute(arguments: &[&str]) -> Result<Vec<u8>, Error> {
     let output = Command::new(program())
         .args(arguments)
         .output()
         .map_err(Error::NotFound)?;
     if output.status.success() {
-        serde_json::from_slice(&output.stdout).map_err(Error::BadData)
+        Ok(output.stdout)
     } else {
         let message = String::from_utf8_lossy(&output.stderr);
         Err(Error::Failed(message.trim().to_string()))

@@ -2,8 +2,8 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use crate::chart::{self, Scale};
 use crate::clock;
-use crate::engine::{Daylight, Fall, Forecast, Hour, Report, Sky};
-use crate::{Chart, Day, Legend, Mark, Spot, Tick, Tone};
+use crate::engine::{Daylight, Fall, Forecast, Hour, Place, Report, Sky};
+use crate::{Chart, Choice, Day, Legend, Mark, Spot, Tick, Tone};
 
 const CHART_HOURS: usize = 48;
 // Below this, a day counts as dry.
@@ -64,6 +64,39 @@ pub fn build(report: &Report, now: i64) -> View {
 
 pub fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
     ModelRc::new(VecModel::from(items))
+}
+
+// Saved areas whose name contains what was typed, ignoring case.
+pub fn matching(areas: &[String], typed: &str) -> Vec<usize> {
+    let typed = typed.trim().to_lowercase();
+    (0..areas.len())
+        .filter(|&index| areas[index].to_lowercase().contains(&typed))
+        .collect()
+}
+
+pub fn choices(areas: &[String], matches: &[usize], found: &[Place]) -> Vec<Choice> {
+    let saved = matches.iter().map(|&index| Choice {
+        title: areas[index].as_str().into(),
+        detail: SharedString::new(),
+    });
+    let found = found.iter().map(|place| Choice {
+        title: place.name.as_str().into(),
+        detail: place_detail(place).into(),
+    });
+    saved.chain(found).collect()
+}
+
+// "2502 m · Schwende-Rüte, Appenzell Innerrhoden, Switzerland": the description
+// starts with the name, which the row already shows.
+fn place_detail(place: &Place) -> String {
+    let region = place
+        .description
+        .split_once(", ")
+        .map_or(place.description.as_str(), |(_, rest)| rest);
+    match place.elevation {
+        Some(elevation) => format!("{} m · {region}", whole(elevation)),
+        None => region.to_string(),
+    }
 }
 
 fn current_hour(hours: &[Hour], now: i64) -> Option<&Hour> {
@@ -440,6 +473,35 @@ mod tests {
         assert!(view.precipitation.rain.is_empty());
         assert!(!view.precipitation.snow.is_empty());
         assert_eq!(view.temperature.ticks.row_count(), 2);
+    }
+
+    #[test]
+    fn typing_filters_saved_areas_ignoring_case() {
+        let areas = vec![
+            String::from("Bödele ski resort"),
+            String::from("Säntis"),
+            String::from("Hoher Freschen"),
+        ];
+
+        assert_eq!(matching(&areas, ""), [0, 1, 2]);
+        assert_eq!(matching(&areas, "säN"), [1]);
+        assert_eq!(matching(&areas, " res"), [0, 2]);
+        assert!(matching(&areas, "aneto").is_empty());
+    }
+
+    #[test]
+    fn found_places_show_elevation_and_region() {
+        let place = |elevation| Place {
+            name: String::from("Säntis"),
+            description: String::from("Säntis, Schwende-Rüte, Switzerland"),
+            elevation,
+        };
+
+        assert_eq!(
+            place_detail(&place(Some(2502.0))),
+            "2502 m · Schwende-Rüte, Switzerland"
+        );
+        assert_eq!(place_detail(&place(None)), "Schwende-Rüte, Switzerland");
     }
 
     #[test]

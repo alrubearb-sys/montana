@@ -8,6 +8,7 @@ export struct Tick { position: float, text: string }
 export struct Mark { position: float, text: string, midnight: bool }
 export enum Tone { line, snow, ice }
 export struct Legend { text: string, tone: Tone }
+export struct Choice { title: string, detail: string }
 export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick] }
 
 // Omarchy's palette roles (themes/tokyo-night/colors.toml), so a later version can read
@@ -225,9 +226,13 @@ export component Panel inherits Window {
     in property <Chart> wind;
     in property <Chart> precipitation;
     in property <[string]> readings;
-    in property <[string]> areas;
+    in property <[Choice]> choices;
+    // Index in `choices` of the area on show, or -1.
     in property <int> selected;
+    in property <bool> searching;
     callback choose(int);
+    callback edited(string);
+    callback search(string);
     callback previous;
     callback next;
     callback refresh;
@@ -238,8 +243,12 @@ export component Panel inherits Window {
     property <bool> picking;
     property <int> cursor;
 
-    function pick(index: int) {
+    function close-picker() {
         root.picking = false;
+        keys.focus();
+    }
+    function pick(index: int) {
+        root.close-picker();
         root.choose(index);
     }
 
@@ -265,13 +274,6 @@ export component Panel inherits Window {
 
     keys := FocusScope {
         key-pressed(event) => {
-            if root.picking {
-                if event.text == Key.Escape { root.picking = false; return accept; }
-                if event.text == Key.UpArrow { root.cursor = max(0, root.cursor - 1); return accept; }
-                if event.text == Key.DownArrow { root.cursor = min(root.areas.length - 1, root.cursor + 1); return accept; }
-                if event.text == Key.Return { root.pick(root.cursor); return accept; }
-                return reject;
-            }
             if event.text == Key.Escape { root.dismiss(); return accept; }
             if event.text == Key.LeftArrow { root.previous(); return accept; }
             if event.text == Key.RightArrow { root.next(); return accept; }
@@ -294,8 +296,13 @@ export component Panel inherits Window {
                     open: root.picking;
                     horizontal-stretch: 1;
                     clicked => {
-                        root.cursor = root.selected;
-                        root.picking = !root.picking;
+                        if root.picking {
+                            root.close-picker();
+                        } else {
+                            root.cursor = -1;
+                            root.edited("");
+                            root.picking = true;
+                        }
                     }
                 }
                 Text { text: root.daylight; color: Theme.sun; font-size: Style.body; vertical-alignment: center; }
@@ -368,41 +375,90 @@ export component Panel inherits Window {
 
     // Above everything else; a click outside the list closes it.
     if root.picking: TouchArea {
-        clicked => { root.picking = false; }
+        clicked => { root.close-picker(); }
     }
     if root.picking: Rectangle {
         x: trigger.absolute-position.x - root.absolute-position.x;
         y: trigger.absolute-position.y - root.absolute-position.y + trigger.height + Style.label-gap;
         width: trigger.width;
-        height: root.areas.length * Style.popup-row-height + 4px;
+        height: popup.preferred-height + 4px;
         background: Theme.background;
         border-width: 2px;
         border-color: Theme.border;
-        VerticalLayout {
-            x: 2px;
-            y: 2px;
-            width: parent.width - 4px;
-            height: parent.height - 4px;
-            for name[index] in root.areas: Rectangle {
-                height: Style.popup-row-height;
-                background: index == root.cursor ? Theme.text.with-alpha(0.08)
-                    : index == root.selected ? Theme.text.with-alpha(0.18) : transparent;
-                Text {
-                    x: Style.row-padding-x;
-                    width: parent.width - 2 * Style.row-padding-x;
-                    height: 100%;
-                    text: name;
-                    color: Theme.text;
-                    font-size: Style.body;
-                    vertical-alignment: center;
-                    overflow: elide;
+        // Seen before the text field, so that it never takes these keys.
+        FocusScope {
+            capture-key-pressed(event) => {
+                if event.text == Key.Escape { root.close-picker(); return accept; }
+                if event.text == Key.UpArrow { root.cursor = max(-1, root.cursor - 1); return accept; }
+                if event.text == Key.DownArrow { root.cursor = min(root.choices.length - 1, root.cursor + 1); return accept; }
+                if event.text == Key.Return {
+                    if root.cursor >= 0 { root.pick(root.cursor); } else if field.text != "" { root.search(field.text); }
+                    return accept;
                 }
-                TouchArea {
-                    // Not `pointer`: inside Panel that name is the chart's touch area.
-                    mouse-cursor: MouseCursor.pointer;
-                    // The mouse and the keyboard share one cursor, as in Omarchy.
-                    changed has-hover => { if self.has-hover { root.cursor = index; } }
-                    clicked => { root.pick(index); }
+                return reject;
+            }
+            popup := VerticalLayout {
+                x: 2px;
+                y: 2px;
+                width: parent.width - 4px;
+                height: self.preferred-height;
+                Rectangle {
+                    height: Style.popup-row-height + Style.control-padding-x;
+                    if field.text == "": Text {
+                        x: Style.row-padding-x;
+                        height: 100%;
+                        text: "Search";
+                        color: Theme.dim;
+                        font-size: Style.body;
+                        vertical-alignment: center;
+                    }
+                    field := TextInput {
+                        x: Style.row-padding-x;
+                        width: parent.width - 2 * Style.row-padding-x;
+                        height: 100%;
+                        color: Theme.text;
+                        font-size: Style.body;
+                        vertical-alignment: center;
+                        selection-background-color: Theme.text.with-alpha(0.35);
+                        init => { self.focus(); }
+                        edited => {
+                            root.cursor = -1;
+                            root.edited(self.text);
+                        }
+                    }
+                }
+                Rectangle { height: 1px; background: Theme.text.with-alpha(0.10); }
+                for choice[index] in root.choices: Rectangle {
+                    height: choice.detail == "" ? Style.popup-row-height : Style.popup-row-height + Style.row-padding-x;
+                    background: index == root.cursor ? Theme.text.with-alpha(0.08)
+                        : index == root.selected ? Theme.text.with-alpha(0.18) : transparent;
+                    VerticalLayout {
+                        padding-left: Style.row-padding-x;
+                        padding-right: Style.row-padding-x;
+                        alignment: center;
+                        Text { text: choice.title; color: Theme.text; font-size: Style.body; overflow: elide; }
+                        if choice.detail != "": Text { text: choice.detail; color: Theme.dim; font-size: Style.caption; overflow: elide; }
+                    }
+                    TouchArea {
+                        // Not `pointer`: inside Panel that name is the chart's touch area.
+                        mouse-cursor: MouseCursor.pointer;
+                        // The mouse and the keyboard share one cursor, as in Omarchy.
+                        changed has-hover => { if self.has-hover { root.cursor = index; } }
+                        clicked => { root.pick(index); }
+                    }
+                }
+                if root.searching || root.choices.length == 0: Rectangle {
+                    height: Style.popup-row-height;
+                    Text {
+                        x: Style.row-padding-x;
+                        width: parent.width - 2 * Style.row-padding-x;
+                        height: 100%;
+                        text: root.searching ? "Searching..." : field.text == "" ? "No areas" : "No matches. Press Enter to search";
+                        color: Theme.dim;
+                        font-size: Style.body;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
                 }
             }
         }
