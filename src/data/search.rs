@@ -4,8 +4,13 @@ use crate::data::get;
 use crate::error::Error;
 use crate::model::Meters;
 
-// Left, top, right and bottom of Europe, in degrees.
-const EUROPE: &str = "-11,71.5,40,34";
+// More than are shown, so that the reordering below has something to choose from.
+const ASKED: &str = "10";
+const SHOWN: usize = 5;
+// A nudge for mountain places when two are about as well known: Nominatim's
+// importance, mostly from Wikipedia, goes from 0 to 1 (Mount Everest 0.61, a street
+// called Everest 0.05).
+const MOUNTAIN_BONUS: f64 = 0.1;
 // Nominatim ranks places by size: 4 a country, 8 a state or canton, 12 a district,
 // 16 a city, 18 a peak. Up to districts, the point is only the middle of a large
 // area: the canton of St. Gallen gives a mountain at 2010 m.
@@ -27,8 +32,11 @@ struct NominatimPlace {
     lat: String,
     lon: String,
     name: String,
+    // The OpenStreetMap value, such as "peak" or "winter_sports".
     #[serde(rename = "type")]
     kind: String,
+    #[serde(default)]
+    importance: f64,
     // What the place is ("city", "peak", "postcode"), clearer than `type`.
     #[serde(default)]
     addresstype: String,
@@ -57,23 +65,40 @@ pub fn request(url: &str, text: &str) -> Result<Vec<Place>, Error> {
     let query = [
         ("q", text),
         ("format", "jsonv2"),
-        ("limit", "5"),
+        ("limit", ASKED),
         ("extratags", "1"),
         ("addressdetails", "1"),
         ("accept-language", "en"),
-        ("viewbox", EUROPE),
-        ("bounded", "1"),
     ];
     parse(&get(url, &query)?)
 }
 
 fn parse(json: &str) -> Result<Vec<Place>, Error> {
-    let places: Vec<NominatimPlace> = serde_json::from_str(json).map_err(Error::UnexpectedData)?;
-    places
-        .into_iter()
-        .filter(|place| place.place_rank > SMALLEST_REGION_RANK)
-        .map(to_place)
-        .collect()
+    let mut places: Vec<NominatimPlace> =
+        serde_json::from_str(json).map_err(Error::UnexpectedData)?;
+    places.retain(|place| place.place_rank > SMALLEST_REGION_RANK);
+    // Best known first; the sort is stable, so ties keep Nominatim's order.
+    places.sort_by(|a, b| score(b).total_cmp(&score(a)));
+    places.into_iter().take(SHOWN).map(to_place).collect()
+}
+
+fn score(place: &NominatimPlace) -> f64 {
+    let mountain = matches!(
+        place.kind.as_str(),
+        "peak"
+            | "volcano"
+            | "ridge"
+            | "saddle"
+            | "mountain_pass"
+            | "glacier"
+            | "winter_sports"
+            | "alpine_hut"
+    );
+    if mountain {
+        place.importance + MOUNTAIN_BONUS
+    } else {
+        place.importance
+    }
 }
 
 fn to_place(place: NominatimPlace) -> Result<Place, Error> {
@@ -205,6 +230,34 @@ mod tests {
 
         assert_eq!(santis[0].name, "Säntis");
         assert_eq!(st_gallen[0].name, "St. Gallen");
+    }
+
+    #[test]
+    fn best_known_comes_first() {
+        let places = parse(include_str!("../../tests/data/nominatim_everest.json")).unwrap();
+
+        assert_eq!(places.len(), 2);
+        assert_eq!(places[0].name, "Mount Everest");
+        assert_eq!(places[0].kind, "peak");
+    }
+
+    #[test]
+    fn mountains_win_near_ties() {
+        let place = |kind: &str, importance| NominatimPlace {
+            lat: String::new(),
+            lon: String::new(),
+            name: String::new(),
+            kind: kind.to_string(),
+            importance,
+            addresstype: String::new(),
+            place_rank: 18,
+            display_name: String::new(),
+            address: Address::default(),
+            extratags: None,
+        };
+
+        assert!(score(&place("peak", 0.40)) > score(&place("village", 0.45)));
+        assert!(score(&place("peak", 0.05)) < score(&place("city", 0.60)));
     }
 
     #[test]

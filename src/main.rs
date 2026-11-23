@@ -36,7 +36,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Search for a place in Europe
+    /// Search for a place
     Search {
         text: String,
         /// Print the places as JSON

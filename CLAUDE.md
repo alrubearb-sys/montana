@@ -69,8 +69,9 @@ Sacadas de `docs/buenas-practicas.md` (lo que hacen Zed, ruff, uv, rust-lang y o
 
 ## Datos
 
-Cobertura: toda Europa, sin base de datos propia. El usuario busca o hace clic igual en todas partes
-y el programa elige la fuente por detrás. Solo se guardan las zonas favoritas.
+Cobertura: todo el mundo para buscar, el tiempo, la altura y el mapa; aludes y mapas oficiales solo
+en los países de abajo. Sin base de datos propia: el usuario busca o hace clic igual en todas partes y
+el programa elige la fuente por detrás. Solo se guardan las zonas favoritas.
 
 - Tiempo: Open-Meteo, por coordenadas y altitud, gratis y sin clave.
 - Viento: el de 10 m se queda muy corto en las cimas (Aneto, media de un día: 21,7 km/h frente a 65,1
