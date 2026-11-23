@@ -34,7 +34,7 @@ pub fn build(report: &Report, now: i64) -> View {
         .take(CHART_HOURS)
         .collect();
 
-    let mut now_spots = vec![spot("summit", summit, now)];
+    let mut now_spots = vec![spot(&point_label(report), summit, now)];
     now_spots.extend(report.base.as_ref().map(|base| spot("base", base, now)));
     let totals: Vec<Totals> = summit
         .hours
@@ -108,19 +108,28 @@ fn current_hour(hours: &[Hour], now: i64) -> Option<&Hour> {
     hours.iter().rfind(|hour| hour.time <= now)
 }
 
+// "summit" only makes sense with a base below it; a single point says what it is.
+fn point_label(report: &Report) -> String {
+    match (&report.base, &report.kind) {
+        (Some(_), _) => String::from("summit"),
+        (None, Some(kind)) => kind.replace('_', " "),
+        (None, None) => String::from("elevation"),
+    }
+}
+
 // What one spot shows now, before the columns are lined up.
 struct Now {
-    label: &'static str,
+    label: String,
     height: String,
     sky: &'static str,
     temperature: String,
     wind: String,
 }
 
-fn spot(label: &'static str, forecast: &Forecast, now: i64) -> Now {
+fn spot(label: &str, forecast: &Forecast, now: i64) -> Now {
     let hour = current_hour(&forecast.hours, now);
     Now {
-        label,
+        label: label.to_string(),
         height: whole(forecast.point.elevation),
         sky: hour.map_or("-", sky_label),
         temperature: hour.map_or(dash(), |hour| whole(hour.temperature_c)),
@@ -135,7 +144,7 @@ fn spots(readings: &[Now]) -> Vec<Spot> {
     readings
         .iter()
         .map(|now| Spot {
-            label: now.label.into(),
+            label: now.label.as_str().into(),
             height: format!("{:>height$} m", now.height).into(),
             sky: now.sky.into(),
             temperature: format!("{:>temperature$} °C", now.temperature).into(),
@@ -436,6 +445,7 @@ mod tests {
 
     fn report() -> Report {
         Report {
+            kind: None,
             summit: Forecast {
                 point: Point { elevation: 1448.0 },
                 utc_offset_seconds: 3600,
@@ -447,6 +457,18 @@ mod tests {
             },
             base: None,
         }
+    }
+
+    #[test]
+    fn summit_only_above_a_base() {
+        let mut report = report();
+        assert_eq!(point_label(&report), "elevation");
+
+        report.kind = Some(String::from("city_district"));
+        assert_eq!(point_label(&report), "city district");
+
+        report.base = Some(report.summit.clone());
+        assert_eq!(point_label(&report), "summit");
     }
 
     #[test]

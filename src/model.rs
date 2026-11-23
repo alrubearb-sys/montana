@@ -15,6 +15,10 @@ pub struct Point {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Area {
     pub name: String,
+    // What the place is, as Nominatim says ("city", "suburb", "peak"). Areas saved
+    // before it was kept have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     pub summit: Point,
     pub base: Option<Point>,
 }

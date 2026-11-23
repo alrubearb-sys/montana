@@ -111,6 +111,7 @@ mod tests {
         let path = directory.join("areas.json");
         let areas = vec![Area {
             name: String::from("Aneto"),
+            kind: Some(String::from("peak")),
             summit: Point {
                 latitude: 42.6311,
                 longitude: 0.6567,

@@ -101,6 +101,7 @@ pub fn add(text: &str, chosen: usize, name: Option<String>) -> Result<(Area, Sou
     let (elevation, source) = elevation::find(&place)?;
     let area = Area {
         name,
+        kind: Some(place.kind.clone()),
         summit: Point {
             latitude: place.latitude,
             longitude: place.longitude,
@@ -132,6 +133,7 @@ fn wait_ms(last_request_ms: u64, now_ms: u64) -> u64 {
 fn boedele() -> Area {
     Area {
         name: String::from("Bödele ski resort"),
+        kind: None,
         summit: Point {
             latitude: 47.4031,
             longitude: 9.8132,

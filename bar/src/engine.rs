@@ -8,6 +8,8 @@ use serde::de::DeserializeOwned;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Report {
+    #[serde(default)]
+    pub kind: Option<String>,
     pub summit: Forecast,
     pub base: Option<Forecast>,
 }

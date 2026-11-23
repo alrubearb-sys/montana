@@ -19,6 +19,7 @@ pub struct SearchResults {
 #[derive(Serialize)]
 pub struct Report {
     pub name: String,
+    pub kind: Option<String>,
     pub summit: Forecast,
     pub base: Option<Forecast>,
     pub credits: &'static str,
@@ -212,6 +213,7 @@ mod tests {
         };
         let report = Report {
             name: String::from("Aneto"),
+            kind: Some(String::from("peak")),
             summit: Forecast {
                 point,
                 utc_offset_seconds: 3600,
@@ -229,6 +231,7 @@ mod tests {
 
         let expected = serde_json::json!({
             "name": "Aneto",
+            "kind": "peak",
             "summit": {
                 "point": { "latitude": 42.6311, "longitude": 0.6567, "elevation": 3404.0 },
                 "utc_offset_seconds": 3600,

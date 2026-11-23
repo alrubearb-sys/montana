@@ -149,6 +149,7 @@ fn show_json(out: &mut impl Write, name: &str) -> Result<(), Error> {
 fn report(area: Area) -> Result<Report, Error> {
     Ok(Report {
         name: area.name,
+        kind: area.kind,
         summit: forecast::request(area.summit)?,
         base: area.base.map(forecast::request).transpose()?,
         credits: output::WEATHER_CREDIT,
