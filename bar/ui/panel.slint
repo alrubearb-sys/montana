@@ -92,7 +92,7 @@ component Button inherits Rectangle {
         Text { text: root.text; color: Theme.text; font-size: Style.body; vertical-alignment: center; horizontal-alignment: center; }
     }
     touch := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: MouseCursor.pointer;
         clicked => { root.clicked(); }
     }
 }
@@ -117,7 +117,7 @@ component MapButton inherits Rectangle {
         stroke-width: 1.25px;
     }
     touch := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: MouseCursor.pointer;
         clicked => { root.clicked(); }
     }
 }
@@ -148,7 +148,7 @@ component Picker inherits Rectangle {
         }
     }
     touch := TouchArea {
-        mouse-cursor: pointer;
+        mouse-cursor: MouseCursor.pointer;
         clicked => { root.clicked(); }
     }
 }
@@ -255,6 +255,8 @@ export component Panel inherits Window {
     // Index in `choices` of the area on show, or -1.
     in property <int> selected;
     in property <bool> searching;
+    // A newer release, or empty when this one is the newest.
+    in property <string> new-version;
     callback choose(int);
     callback remove(int);
     callback edit(int);
@@ -264,6 +266,7 @@ export component Panel inherits Window {
     callback next;
     callback refresh;
     callback open-map;
+    callback update;
     callback dismiss;
     callback quit;
     property <int> hours: readings.length;
@@ -398,7 +401,28 @@ export component Panel inherits Window {
                 Button { text: "refresh"; clicked => { root.refresh(); } }
                 Button { text: "quit"; clicked => { root.quit(); } }
             }
-            Label { text: "Weather data by Open-Meteo (CC BY 4.0). Made with Slint."; font-size: Style.caption; }
+            // The sources and, when there is one, the update link: one faint line at
+            // the very end, there when wanted and never in the way.
+            HorizontalLayout {
+                spacing: Style.row-gap;
+                Label {
+                    text: "Weather data by Open-Meteo (CC BY 4.0). Made with Slint.";
+                    font-size: Style.caption;
+                    opacity: 0.4;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+                if root.new-version != "": Label {
+                    text: "Update to " + root.new-version;
+                    font-size: Style.caption;
+                    opacity: link.has-hover ? 0.9 : 0.4;
+                    vertical-alignment: bottom;
+                    link := TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => { root.update(); }
+                    }
+                }
+            }
         }
     }
 

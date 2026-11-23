@@ -25,6 +25,8 @@ const WIDTH: f64 = 440.0;
 const MAX_AGE_SECONDS: i64 = 3600;
 // A click on the icon takes the focus away first, so the panel is already closed by then.
 const SAME_CLICK: Duration = Duration::from_millis(300);
+// As often as Omarchy looks for its own updates, and only when the panel opens.
+const CHECK_EVERY: Duration = Duration::from_secs(6 * 3600);
 
 thread_local! {
     static APP: RefCell<Option<Rc<App>>> = const { RefCell::new(None) };
@@ -49,6 +51,9 @@ struct App {
     problem: RefCell<String>,
     closed_at: Cell<Option<Instant>>,
     had_focus: Cell<bool>,
+    // A newer release, from `peakcast outdated`; empty when this one is the newest.
+    new_version: RefCell<String>,
+    checked_at: Cell<Option<Instant>>,
 }
 
 struct Saved {
@@ -88,6 +93,8 @@ fn run() -> Result<(), PlatformError> {
         problem: RefCell::default(),
         closed_at: Cell::new(None),
         had_focus: Cell::new(false),
+        new_version: RefCell::default(),
+        checked_at: Cell::new(None),
     });
     app.tray.on_open(|| with_app(App::toggle));
     APP.with(|slot| slot.replace(Some(Rc::clone(&app))));
@@ -134,6 +141,7 @@ fn connect(panel: &Panel) {
     panel.on_search(|text| with_app(|app| app.search(&text)));
     panel.on_refresh(|| with_app(App::fetch));
     panel.on_open_map(|| with_app(App::open_map));
+    panel.on_update(|| with_app(App::update));
     panel.on_dismiss(|| with_app(App::close));
     panel.on_quit(|| {
         // It only fails when the loop has already ended.
@@ -182,7 +190,34 @@ impl App {
         Timer::single_shot(Duration::ZERO, || with_app(App::focus));
         self.show_selected();
         self.reload_areas(None);
+        self.check_version();
         Ok(())
+    }
+
+    fn check_version(&self) {
+        if self
+            .checked_at
+            .get()
+            .is_some_and(|at| at.elapsed() < CHECK_EVERY)
+        {
+            return;
+        }
+        self.checked_at.set(Some(Instant::now()));
+        in_background(engine::outdated, |app, version| {
+            app.new_version.replace(version.unwrap_or_default());
+            app.show_selected();
+        });
+    }
+
+    // brew replaces the app while it is closed, and opens it again.
+    fn update(&self) {
+        match engine::update() {
+            Ok(()) => {
+                // It only fails when the loop has already ended.
+                let _ = slint::quit_event_loop();
+            }
+            Err(error) => self.report_problem(&error),
+        }
     }
 
     fn focus(&self) {
@@ -445,6 +480,7 @@ impl App {
             return;
         };
         panel.set_problem(self.problem.borrow().as_str().into());
+        panel.set_new_version(self.new_version.borrow().as_str().into());
         let Some(area) = self.selected_area() else {
             return;
         };

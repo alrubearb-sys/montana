@@ -208,6 +208,34 @@ fn map(arguments: &[String]) -> Result<Option<String>, Error> {
     Ok(Some(name).filter(|name| output.status.success() && !name.is_empty()))
 }
 
+// The newest release, if this one is older. Without network there is none.
+pub fn outdated() -> Option<String> {
+    let output = execute(&["outdated"]).ok()?;
+    let version = String::from_utf8_lossy(&output).trim().to_string();
+    Some(version).filter(|version| !version.is_empty())
+}
+
+// In Terminal, as Omarchy updates itself in one, so that what brew does is seen.
+// Peakcast opens again at the end, updated or not.
+pub fn update() -> Result<(), Error> {
+    let status = Command::new("osascript")
+        .args([
+            "-e",
+            r#"tell application "Terminal" to do script "brew upgrade --cask peakcast; open -a Peakcast""#,
+            "-e",
+            r#"tell application "Terminal" to activate"#,
+        ])
+        .status()
+        .map_err(Error::NotFound)?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(Error::Failed(String::from(
+            "cannot open Terminal to update",
+        )))
+    }
+}
+
 pub fn remove(area: &str) -> Result<(), Error> {
     execute(&["remove", "--", area]).map(|_| ())
 }
