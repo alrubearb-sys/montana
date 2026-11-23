@@ -168,6 +168,10 @@ pub fn add(text: &str, number: usize) -> Result<(), Error> {
     execute(&["add", "--result", &number.to_string(), "--", text]).map(|_| ())
 }
 
+pub fn remove(area: &str) -> Result<(), Error> {
+    execute(&["remove", "--", area]).map(|_| ())
+}
+
 fn run<T: DeserializeOwned>(arguments: &[&str]) -> Result<T, Error> {
     serde_json::from_slice(&execute(arguments)?).map_err(Error::BadData)
 }

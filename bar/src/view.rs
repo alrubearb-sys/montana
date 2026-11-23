@@ -75,13 +75,17 @@ pub fn matching(areas: &[String], typed: &str) -> Vec<usize> {
 }
 
 pub fn choices(areas: &[String], matches: &[usize], found: &[Place]) -> Vec<Choice> {
+    // The last area stays, so it shows no ×.
+    let removable = areas.len() > 1;
     let saved = matches.iter().map(|&index| Choice {
         title: areas[index].as_str().into(),
         detail: SharedString::new(),
+        removable,
     });
     let found = found.iter().map(|place| Choice {
         title: place.name.as_str().into(),
         detail: place_detail(place).into(),
+        removable: false,
     });
     saved.chain(found).collect()
 }

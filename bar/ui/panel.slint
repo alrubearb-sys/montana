@@ -8,7 +8,7 @@ export struct Tick { position: float, text: string }
 export struct Mark { position: float, text: string, midnight: bool }
 export enum Tone { line, snow, ice }
 export struct Legend { text: string, tone: Tone }
-export struct Choice { title: string, detail: string }
+export struct Choice { title: string, detail: string, removable: bool }
 export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick] }
 
 // Omarchy's palette roles (themes/tokyo-night/colors.toml), so a later version can read
@@ -231,6 +231,7 @@ export component Panel inherits Window {
     in property <int> selected;
     in property <bool> searching;
     callback choose(int);
+    callback remove(int);
     callback edited(string);
     callback search(string);
     callback previous;
@@ -445,6 +446,25 @@ export component Panel inherits Window {
                         // The mouse and the keyboard share one cursor, as in Omarchy.
                         changed has-hover => { if self.has-hover { root.cursor = index; } }
                         clicked => { root.pick(index); }
+                    }
+                    // The × of Omarchy's world clock, without its circle, only on the row
+                    // under the cursor. The 20 px box is there to be easy to hit.
+                    if choice.removable && index == root.cursor: Rectangle {
+                        x: parent.width - Style.row-padding-x - self.width;
+                        y: (parent.height - self.height) / 2;
+                        width: 20px;
+                        height: 20px;
+                        Text {
+                            text: "×";
+                            color: cross.has-hover ? Theme.text : Theme.dim;
+                            font-size: Style.title;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        cross := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => { root.remove(index); }
+                        }
                     }
                 }
                 if root.searching || root.choices.length == 0: Rectangle {

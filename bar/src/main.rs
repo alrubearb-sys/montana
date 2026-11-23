@@ -37,6 +37,7 @@ struct App {
     areas: RefCell<Vec<String>>,
     selected: Cell<usize>,
     // The area picker: saved areas that match what was typed, then places found.
+    typed: RefCell<String>,
     matches: RefCell<Vec<usize>>,
     found: RefCell<Vec<Place>>,
     searched: RefCell<String>,
@@ -70,6 +71,7 @@ fn run() -> Result<(), PlatformError> {
         tray: Tray::new()?,
         areas: RefCell::default(),
         selected: Cell::new(0),
+        typed: RefCell::default(),
         matches: RefCell::default(),
         found: RefCell::default(),
         searched: RefCell::default(),
@@ -109,6 +111,11 @@ fn connect(panel: &Panel) {
     panel.on_choose(|index| {
         if let Ok(index) = usize::try_from(index) {
             with_app(|app| app.choose(index));
+        }
+    });
+    panel.on_remove(|index| {
+        if let Ok(index) = usize::try_from(index) {
+            with_app(|app| app.remove(index));
         }
     });
     panel.on_edited(|text| with_app(|app| app.filter(&text)));
@@ -217,6 +224,7 @@ impl App {
     }
 
     fn filter(&self, typed: &str) {
+        self.typed.replace(typed.to_string());
         self.matches
             .replace(view::matching(&self.areas.borrow(), typed));
         self.found.borrow_mut().clear();
@@ -277,6 +285,24 @@ impl App {
         );
     }
 
+    fn remove(&self, index: usize) {
+        let Some(area) = self
+            .matches
+            .borrow()
+            .get(index)
+            .and_then(|&area| self.areas.borrow().get(area).cloned())
+        else {
+            return;
+        };
+        in_background(
+            move || engine::remove(&area),
+            |app, result| match result {
+                Ok(()) => app.reload_areas(None),
+                Err(error) => app.report_problem(&error),
+            },
+        );
+    }
+
     fn reload_areas(&self, wanted: Option<String>) {
         in_background(engine::areas, move |app, result| match result {
             Ok(areas) => {
@@ -284,7 +310,8 @@ impl App {
                 let index = areas
                     .iter()
                     .position(|area| Some(area) == previous.as_ref());
-                app.matches.replace((0..areas.len()).collect());
+                app.matches
+                    .replace(view::matching(&areas, &app.typed.borrow()));
                 app.areas.replace(areas);
                 app.selected.set(index.unwrap_or(0));
                 app.show_selected();
