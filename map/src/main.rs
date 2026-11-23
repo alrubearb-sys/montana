@@ -23,8 +23,8 @@ use crate::engine::Place;
 const CANCELLED: u8 = 2;
 const START_ZOOM: f64 = 14.0;
 const PLACE_ZOOM: f64 = 14.0;
-const USAGE: &str = "usage: montana-map <latitude,longitude of where to start>
-       montana-map --edit <area> <summit latitude,longitude> [<base latitude,longitude>]";
+const USAGE: &str = "usage: peakcast-map <latitude,longitude of where to start>
+       peakcast-map --edit <area> <summit latitude,longitude> [<base latitude,longitude>]";
 
 // Omarchy's Tokyo Night roles, as in the panel.
 const BACKGROUND: Color32 = Color32::from_rgb(0x1a, 0x1b, 0x26);
@@ -115,8 +115,8 @@ fn main() -> ExitCode {
 
 fn run(args: Args, saved: Rc<RefCell<Option<String>>>) -> eframe::Result {
     let title = match &args {
-        Args::Create { .. } => String::from("New area · montana"),
-        Args::Edit { area, .. } => format!("Edit · {area} · montana"),
+        Args::Create { .. } => String::from("New area · Peakcast"),
+        Args::Edit { area, .. } => format!("Edit · {area} · Peakcast"),
     };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -125,7 +125,7 @@ fn run(args: Args, saved: Rc<RefCell<Option<String>>>) -> eframe::Result {
         ..eframe::NativeOptions::default()
     };
     eframe::run_native(
-        "montana map",
+        "peakcast map",
         options,
         Box::new(move |cc| {
             omarchy_look(&cc.egui_ctx);
@@ -171,7 +171,7 @@ impl MapApp {
         let options = HttpOptions {
             cache: tile_cache(),
             user_agent: Some(HeaderValue::from_static(
-                "montana-map/0.1 (https://github.com/alrubearb-sys/montana)",
+                "peakcast-map/0.1 (https://github.com/alrubearb-sys/peakcast)",
             )),
             ..HttpOptions::default()
         };
@@ -597,7 +597,7 @@ fn tile_cache() -> Option<PathBuf> {
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
-    Some(base.join("montana").join("tiles"))
+    Some(base.join("peakcast").join("tiles"))
 }
 
 #[cfg(test)]

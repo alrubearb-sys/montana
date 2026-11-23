@@ -1,8 +1,8 @@
 [package]
-name = "montana-map"
+name = "peakcast-map"
 version = "0.1.0"
 edition = "2024"
-description = "Map to place the summit and the base of a montana area."
+description = "Map to place the summit and the base of a peakcast area."
 license = "MIT OR Apache-2.0"
 publish = false
 

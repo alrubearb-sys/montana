@@ -1,25 +1,25 @@
 #!/bin/sh
-# Builds Montana.app and installs it in /Applications.
+# Builds Peakcast.app and installs it in /Applications.
 set -eu
 cd "$(dirname "$0")/.."
 
-app=/Applications/Montana.app
-new=target/Montana.app
+app=/Applications/Peakcast.app
+new=target/Peakcast.app
 
 cargo build --release --workspace
 rm -rf "$new"
 mkdir -p "$new/Contents/MacOS" "$new/Contents/Resources"
-cp target/release/montana target/release/montana-bar target/release/montana-map "$new/Contents/MacOS/"
-cp bar/ui/montana.icns bar/ui/fonts/OFL.txt "$new/Contents/Resources/"
+cp target/release/peakcast target/release/peakcast-bar target/release/peakcast-map "$new/Contents/MacOS/"
+cp bar/ui/peakcast.icns bar/ui/fonts/OFL.txt "$new/Contents/Resources/"
 cat > "$new/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleExecutable</key><string>montana-bar</string>
-  <key>CFBundleIconFile</key><string>montana</string>
-  <key>CFBundleIdentifier</key><string>io.github.alrubearb-sys.montana</string>
-  <key>CFBundleName</key><string>Montana</string>
+  <key>CFBundleExecutable</key><string>peakcast-bar</string>
+  <key>CFBundleIconFile</key><string>peakcast</string>
+  <key>CFBundleIdentifier</key><string>io.github.alrubearb-sys.peakcast</string>
+  <key>CFBundleName</key><string>Peakcast</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
@@ -29,13 +29,13 @@ cat > "$new/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
-codesign --force --sign - "$new/Contents/MacOS/montana"
-codesign --force --sign - "$new/Contents/MacOS/montana-map"
+codesign --force --sign - "$new/Contents/MacOS/peakcast"
+codesign --force --sign - "$new/Contents/MacOS/peakcast-map"
 codesign --force --sign - "$new"
 
-# The map too: while it runs, macOS takes Montana as open and does not start the panel.
-pkill -x montana-bar || true
-pkill -x montana-map || true
+# The map too: while it runs, macOS takes Peakcast as open and does not start the panel.
+pkill -x peakcast-bar || true
+pkill -x peakcast-map || true
 rm -rf "$app"
 cp -R "$new" "$app"
 echo "Installed $app"

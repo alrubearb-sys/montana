@@ -68,7 +68,7 @@ fn directory(variable: &str, fallback: &str) -> Result<PathBuf, Error> {
         Some(path) => PathBuf::from(path),
         None => PathBuf::from(env::var_os("HOME").ok_or(Error::MissingHome)?).join(fallback),
     };
-    Ok(base.join("montana"))
+    Ok(base.join("peakcast"))
 }
 
 fn load<T: DeserializeOwned + Default>(path: &Path) -> Result<T, Error> {
@@ -100,14 +100,14 @@ mod tests {
 
     #[test]
     fn missing_file_gives_default() {
-        let config: Config = load(Path::new("/nonexistent/montana/config.json")).unwrap();
+        let config: Config = load(Path::new("/nonexistent/peakcast/config.json")).unwrap();
 
         assert_eq!(config, Config::default());
     }
 
     #[test]
     fn saved_areas_are_read_back() {
-        let directory = env::temp_dir().join(format!("montana-test-{}", std::process::id()));
+        let directory = env::temp_dir().join(format!("peakcast-test-{}", std::process::id()));
         let path = directory.join("areas.json");
         let areas = vec![Area {
             name: String::from("Aneto"),

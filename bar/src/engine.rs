@@ -155,9 +155,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::BadData(source) => write!(f, "cannot read the answer of montana: {source}"),
+            Error::BadData(source) => write!(f, "cannot read the answer of peakcast: {source}"),
             Error::Failed(message) => write!(f, "{message}"),
-            Error::NotFound(source) => write!(f, "cannot run montana: {source}"),
+            Error::NotFound(source) => write!(f, "cannot run peakcast: {source}"),
         }
     }
 }
@@ -174,7 +174,7 @@ pub fn search(text: &str) -> Result<Vec<Place>, Error> {
     run::<SearchResults>(&["search", "--json", "--", text]).map(|results| results.places)
 }
 
-// `number` counts from 1, as in `montana search`. The search is cached, so this
+// `number` counts from 1, as in `peakcast search`. The search is cached, so this
 // does not ask Nominatim again.
 pub fn add(text: &str, number: usize) -> Result<(), Error> {
     execute(&["add", "--result", &number.to_string(), "--", text]).map(|_| ())
@@ -200,7 +200,7 @@ fn degrees(point: &Point) -> String {
 
 // Waits until the map is closed, and gives the name of the area saved in it, if any.
 fn map(arguments: &[String]) -> Result<Option<String>, Error> {
-    let output = Command::new(program("montana-map"))
+    let output = Command::new(program("peakcast-map"))
         .args(arguments)
         .output()
         .map_err(Error::NotFound)?;
@@ -218,7 +218,7 @@ fn run<T: DeserializeOwned>(arguments: &[&str]) -> Result<T, Error> {
 
 // A separate process, so that the memory of the network connection is given back.
 fn execute(arguments: &[&str]) -> Result<Vec<u8>, Error> {
-    let output = Command::new(program("montana"))
+    let output = Command::new(program("peakcast"))
         .args(arguments)
         .output()
         .map_err(Error::NotFound)?;
@@ -230,7 +230,7 @@ fn execute(arguments: &[&str]) -> Result<Vec<u8>, Error> {
     }
 }
 
-// Next to the panel inside Montana.app, or else on the PATH.
+// Next to the panel inside Peakcast.app, or else on the PATH.
 fn program(name: &str) -> OsString {
     env::current_exe()
         .ok()

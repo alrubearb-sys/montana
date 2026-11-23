@@ -232,7 +232,7 @@ component Plot inherits Rectangle {
 export component Tray inherits SystemTrayIcon {
     callback open <=> root.clicked;
     title: "";
-    tooltip: "montana";
+    tooltip: "Peakcast";
     icon: Palette.color-scheme == ColorScheme.dark ? @image-url("mountain-white.svg") : @image-url("mountain-black.svg");
 }
 
@@ -289,7 +289,7 @@ export component Panel inherits Window {
         }
     }
 
-    title: "montana";
+    title: "Peakcast";
     icon: @image-url("mountain-white.svg");
     width: 440px;
     // At least the content, so the bottom margin is never eaten.

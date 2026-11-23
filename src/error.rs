@@ -44,7 +44,7 @@ impl fmt::Display for Error {
             Error::UnexpectedData(source) => write!(f, "unexpected data: {source}"),
             Error::UnknownArea(name) => write!(
                 f,
-                "unknown area: {name}. Add it with: montana add \"{name}\""
+                "unknown area: {name}. Add it with: peakcast add \"{name}\""
             ),
             Error::UnknownWeatherCode(code) => write!(f, "unknown weather code: {code}"),
         }

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use crate::error::Error;
 
-const USER_AGENT: &str = concat!("montana/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("peakcast/", env!("CARGO_PKG_VERSION"));
 const TIMEOUT: Duration = Duration::from_secs(15);
 
 fn get(url: &str, query: &[(&str, &str)]) -> Result<String, Error> {

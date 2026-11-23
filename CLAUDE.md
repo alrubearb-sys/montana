@@ -98,7 +98,7 @@ luz, probabilidad de tormenta, riesgo de aludes.
 - `data`: peticiones HTTP async y JSON con serde, errores con `Result`.
 - `output`: CLI con clap y salida JSON. Es el motor común: los paneles solo pintan ese JSON.
 - Panel de Omarchy: plugin QML (`bar-widget` con panel) que corre dentro del shell y llama al motor.
-- Panel del Mac: `bar/` (`montana-bar`), app nativa con Slint dibujando con la CPU. Ejecuta `montana`
+- Panel del Mac: `bar/` (`peakcast-bar`), app nativa con Slint dibujando con la CPU. Ejecuta `peakcast`
   para pedir los datos y crea la ventana solo mientras está abierta. Medido el 2026-11-22 (footprint):
   15 MB al arrancar, 38 abierto, de 23 a 33 al cerrar, y 0 CPU y 0 despertares cerrado. Cada redibujo
   pinta el panel entero, así que hay que redibujar lo menos posible. egui daba 37 cerrado y hasta 53 abierto.
@@ -122,10 +122,10 @@ luz, probabilidad de tormenta, riesgo de aludes.
   fase 4 es un plugin de Omarchy (ver la skill `omarchy`, guía `plugins.md`), no un módulo de Waybar.
 - La carpeta está en MEGA. `.megaignore` excluye `target/` para no sincronizar lo compilado; `.git`
   tampoco se sincroniza (lo excluye el `.megaignore` general).
-- Repositorio público: https://github.com/alrubearb-sys/montana (licencia MIT o Apache 2.0). El
+- Repositorio público: https://github.com/alrubearb-sys/peakcast (licencia MIT o Apache 2.0). El
   historial vive ahí. Los commits usan el correo noreply de GitHub, nunca el Gmail personal.
 - El trabajo se organiza con issues y una milestone por fase. Para saber qué toca:
-  `gh issue list -R alrubearb-sys/montana --milestone "Phase 1: CLI forecast for one area"`.
+  `gh issue list -R alrubearb-sys/peakcast --milestone "Phase 1: CLI forecast for one area"`.
   Los commits que terminan una tarea llevan "closes #N". README e issues en inglés; este archivo y
   `docs/` en castellano.
 - Permiso de Alejandro (2026-11-22): subir cada tarea terminada a `main` cuando fmt, clippy y test

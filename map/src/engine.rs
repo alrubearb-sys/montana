@@ -31,9 +31,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::BadData(source) => write!(f, "cannot read the answer of montana: {source}"),
+            Error::BadData(source) => write!(f, "cannot read the answer of peakcast: {source}"),
             Error::Failed(message) => write!(f, "{message}"),
-            Error::NotFound(source) => write!(f, "cannot run montana: {source}"),
+            Error::NotFound(source) => write!(f, "cannot run peakcast: {source}"),
         }
     }
 }
@@ -100,7 +100,7 @@ fn execute(arguments: &[&str]) -> Result<Vec<u8>, Error> {
 fn program() -> OsString {
     env::current_exe()
         .ok()
-        .map(|path| path.with_file_name("montana"))
+        .map(|path| path.with_file_name("peakcast"))
         .filter(|path| path.is_file())
-        .map_or_else(|| OsString::from("montana"), OsString::from)
+        .map_or_else(|| OsString::from("peakcast"), OsString::from)
 }
