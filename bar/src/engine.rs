@@ -23,6 +23,12 @@ pub struct Forecast {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct SavedArea {
+    pub name: String,
+    pub summit: Point,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Place {
     pub name: String,
     pub kind: String,
@@ -155,7 +161,7 @@ impl fmt::Display for Error {
     }
 }
 
-pub fn areas() -> Result<Vec<String>, Error> {
+pub fn areas() -> Result<Vec<SavedArea>, Error> {
     run(&["areas", "--json"])
 }
 
@@ -234,6 +240,23 @@ mod tests {
             snow_line_m: None,
         }
         .fall()
+    }
+
+    #[test]
+    fn reads_saved_areas() {
+        let json = r#"[
+            {"name": "Bödele ski resort",
+             "summit": {"latitude": 47.4031, "longitude": 9.8132, "elevation": 1448.0},
+             "base": {"latitude": 47.4178, "longitude": 9.8182, "elevation": 1088.0}},
+            {"name": "St. Gallen (Lachen)", "kind": "suburb",
+             "summit": {"latitude": 47.4193, "longitude": 9.3519, "elevation": 663.4},
+             "base": null}
+        ]"#;
+
+        let areas: Vec<SavedArea> = serde_json::from_str(json).unwrap();
+
+        assert_eq!(areas[0].name, "Bödele ski resort");
+        assert_eq!(areas[1].summit.latitude, 47.4193);
     }
 
     #[test]

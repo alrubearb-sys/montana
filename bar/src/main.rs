@@ -14,7 +14,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use slint::{ComponentHandle, LogicalPosition, PlatformError, Timer};
 
-use crate::engine::{Error, Place, Report};
+use crate::engine::{Error, Place, Report, SavedArea};
 
 slint::slint! {
     #[edition = "1.19"]
@@ -35,6 +35,8 @@ struct App {
     panel: RefCell<Option<Panel>>,
     tray: Tray,
     areas: RefCell<Vec<String>>,
+    // The same areas with their points, for the map.
+    saved_areas: RefCell<Vec<SavedArea>>,
     selected: Cell<usize>,
     // The area picker: saved areas that match what was typed, then places found.
     typed: RefCell<String>,
@@ -70,6 +72,7 @@ fn run() -> Result<(), PlatformError> {
         panel: RefCell::default(),
         tray: Tray::new()?,
         areas: RefCell::default(),
+        saved_areas: RefCell::default(),
         selected: Cell::new(0),
         typed: RefCell::default(),
         matches: RefCell::default(),
@@ -308,12 +311,13 @@ impl App {
         let Some(area) = self.selected_area() else {
             return;
         };
-        // The map starts where the area on show is, once its forecast says where.
+        // The map starts where the area on show is.
         let center = self
-            .reports
+            .saved_areas
             .borrow()
-            .get(&area)
-            .map(|saved| saved.report.summit.point.clone());
+            .iter()
+            .find(|saved| saved.name == area)
+            .map(|saved| saved.summit.clone());
         let Some(center) = center else {
             return;
         };
@@ -329,7 +333,9 @@ impl App {
 
     fn reload_areas(&self, wanted: Option<String>) {
         in_background(engine::areas, move |app, result| match result {
-            Ok(areas) => {
+            Ok(saved) => {
+                let areas: Vec<String> = saved.iter().map(|area| area.name.clone()).collect();
+                app.saved_areas.replace(saved);
                 let previous = wanted.or_else(|| app.selected_area());
                 let index = areas
                     .iter()

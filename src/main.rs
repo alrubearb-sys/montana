@@ -201,13 +201,15 @@ fn coordinates(text: &str) -> Result<(f64, f64), String> {
     }
 }
 
+// The JSON has the whole areas, so that the panel knows their points before any
+// forecast is asked for.
 fn list(out: &mut impl Write, json: bool) -> Result<(), Error> {
-    let names: Vec<String> = areas::all()?.into_iter().map(|area| area.name).collect();
+    let areas = areas::all()?;
     if json {
-        writeln!(out, "{}", output::to_json(&names)?)?;
+        writeln!(out, "{}", output::to_json(&areas)?)?;
     } else {
-        for name in names {
-            writeln!(out, "{name}")?;
+        for area in areas {
+            writeln!(out, "{}", area.name)?;
         }
     }
     Ok(())
