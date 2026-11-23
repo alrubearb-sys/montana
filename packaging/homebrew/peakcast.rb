@@ -15,11 +15,6 @@ cask "peakcast" do
   app "Peakcast.app"
   binary "#{appdir}/Peakcast.app/Contents/MacOS/peakcast"
 
-  # Started once here; from then on it starts itself at login.
-  postflight_steps do
-    run "/usr/bin/open", args: ["-g", "{{appdir}}/Peakcast.app"]
-  end
-
   uninstall launchctl: "local.peakcast.bar",
             quit:      "io.github.alrubearb-sys.peakcast"
 
@@ -28,4 +23,9 @@ cask "peakcast" do
     "~/.config/peakcast",
     "~/Library/LaunchAgents/local.peakcast.bar.plist",
   ]
+
+  # Homebrew runs install steps where `open` cannot start an app, and a failed step
+  # undoes the install, so the first start is left to the user. It writes its own
+  # login item then.
+  caveats "Open Peakcast once from Applications; from then on it starts at login."
 end
