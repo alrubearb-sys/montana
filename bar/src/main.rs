@@ -121,6 +121,11 @@ fn connect(panel: &Panel) {
             with_app(|app| app.remove(index));
         }
     });
+    panel.on_edit(|index| {
+        if let Ok(index) = usize::try_from(index) {
+            with_app(|app| app.edit(index));
+        }
+    });
     panel.on_edited(|text| with_app(|app| app.filter(&text)));
     panel.on_search(|text| with_app(|app| app.search(&text)));
     panel.on_refresh(|| with_app(App::fetch));
@@ -325,6 +330,37 @@ impl App {
             move || engine::open_map(&center),
             |app, result| match result {
                 Ok(Some(name)) => app.reload_areas(Some(name)),
+                Ok(None) => {}
+                Err(error) => app.report_problem(&error),
+            },
+        );
+    }
+
+    fn edit(&self, index: usize) {
+        let area = self
+            .matches
+            .borrow()
+            .get(index)
+            .and_then(|&area| self.areas.borrow().get(area).cloned())
+            .and_then(|name| {
+                self.saved_areas
+                    .borrow()
+                    .iter()
+                    .find(|saved| saved.name == name)
+                    .cloned()
+            });
+        let Some(area) = area else {
+            return;
+        };
+        let old_name = area.name.clone();
+        in_background(
+            move || engine::edit_map(&area),
+            move |app, result| match result {
+                Ok(Some(name)) => {
+                    // The points moved: the forecast kept is for the old ones.
+                    app.reports.borrow_mut().remove(&old_name);
+                    app.reload_areas(Some(name));
+                }
                 Ok(None) => {}
                 Err(error) => app.report_problem(&error),
             },

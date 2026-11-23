@@ -142,13 +142,28 @@ pub fn create(
 
 // New summit and, if given, new base for a saved area, with their elevations.
 // Without a new base, the old one stays.
-pub fn move_to(name: &str, summit: (f64, f64), base: Option<(f64, f64)>) -> Result<Area, Error> {
+pub fn move_to(
+    name: &str,
+    new_name: Option<&str>,
+    summit: (f64, f64),
+    base: Option<(f64, f64)>,
+) -> Result<Area, Error> {
     let mut areas = all()?;
     let wanted = name.to_lowercase();
-    let area = areas
-        .iter_mut()
-        .find(|area| area.name.to_lowercase() == wanted)
+    let index = areas
+        .iter()
+        .position(|area| area.name.to_lowercase() == wanted)
         .ok_or_else(|| Error::UnknownArea(name.to_string()))?;
+    let new_name = new_name
+        .map(str::trim)
+        .filter(|new_name| !new_name.is_empty());
+    if let Some(new_name) = new_name {
+        if taken(&areas, new_name, index) {
+            return Err(Error::AlreadySaved(new_name.to_string()));
+        }
+        areas[index].name = new_name.to_string();
+    }
+    let area = &mut areas[index];
     area.summit = point_at(summit)?;
     if let Some(base) = base {
         area.base = Some(point_at(base)?);
@@ -156,6 +171,16 @@ pub fn move_to(name: &str, summit: (f64, f64), base: Option<(f64, f64)>) -> Resu
     let moved = area.clone();
     storage::save_areas(&areas)?;
     Ok(moved)
+}
+
+// Another area already has this name; the area being renamed may keep its own,
+// even with other capitals.
+fn taken(areas: &[Area], name: &str, except: usize) -> bool {
+    let name = name.to_lowercase();
+    areas
+        .iter()
+        .enumerate()
+        .any(|(index, area)| index != except && area.name.to_lowercase() == name)
 }
 
 fn point_at((latitude, longitude): (f64, f64)) -> Result<Point, Error> {
@@ -237,6 +262,15 @@ mod tests {
             without(vec![named("Aneto"), named("Säntis")], "Mont Blanc"),
             Err(Error::UnknownArea(_))
         ));
+    }
+
+    #[test]
+    fn a_new_name_must_be_free() {
+        let areas = vec![named("Säntis"), named("Aneto")];
+
+        assert!(taken(&areas, "aneto", 0));
+        assert!(!taken(&areas, "SÄNTIS", 0));
+        assert!(!taken(&areas, "Mont Blanc", 0));
     }
 
     #[test]

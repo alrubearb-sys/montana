@@ -8,7 +8,7 @@ export struct Tick { position: float, text: string }
 export struct Mark { position: float, text: string, midnight: bool }
 export enum Tone { line, snow, ice }
 export struct Legend { text: string, tone: Tone }
-export struct Choice { title: string, detail: string, removable: bool }
+export struct Choice { title: string, detail: string, editable: bool, removable: bool }
 export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick] }
 
 // Omarchy's palette roles (themes/tokyo-night/colors.toml), so a later version can read
@@ -257,6 +257,7 @@ export component Panel inherits Window {
     in property <bool> searching;
     callback choose(int);
     callback remove(int);
+    callback edit(int);
     callback edited(string);
     callback search(string);
     callback previous;
@@ -473,6 +474,31 @@ export component Panel inherits Window {
                         // The mouse and the keyboard share one cursor, as in Omarchy.
                         changed has-hover => { if self.has-hover { root.cursor = index; } }
                         clicked => { root.pick(index); }
+                    }
+                    // A pencil drawn like the ×, to its left: the map with this area's marks.
+                    if choice.editable && index == root.cursor: Rectangle {
+                        x: parent.width - Style.row-padding-x - self.width - (choice.removable ? 24px : 0px);
+                        y: (parent.height - self.height) / 2;
+                        width: 20px;
+                        height: 20px;
+                        Path {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            width: 11px;
+                            height: 11px;
+                            viewbox-width: 11;
+                            viewbox-height: 11;
+                            commands: "M 1 10 L 1.5 7.5 L 8 1 L 10 3 L 3.5 9.5 Z M 6.5 2.5 L 8.5 4.5";
+                            stroke: pencil.has-hover ? Theme.text : Theme.dim;
+                            stroke-width: 1.2px;
+                        }
+                        pencil := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => {
+                                root.close-picker();
+                                root.edit(index);
+                            }
+                        }
                     }
                     // The × of Omarchy's world clock, without its circle, only on the row
                     // under the cursor. The 20 px box is there to be easy to hit.

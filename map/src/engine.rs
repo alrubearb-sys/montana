@@ -63,10 +63,15 @@ pub fn create(
     execute(&arguments).map(|_| ())
 }
 
-pub fn move_area(area: &str, summit: (f64, f64), base: Option<(f64, f64)>) -> Result<(), Error> {
+pub fn move_area(
+    area: &str,
+    new_name: &str,
+    summit: (f64, f64),
+    base: Option<(f64, f64)>,
+) -> Result<(), Error> {
     let summit = degrees(summit);
     let base = base.map(degrees);
-    let mut arguments = vec!["move", "--summit", &summit];
+    let mut arguments = vec!["move", "--summit", &summit, "--rename", new_name];
     if let Some(base) = &base {
         arguments.extend(["--base", base]);
     }

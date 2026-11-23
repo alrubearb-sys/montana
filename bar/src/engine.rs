@@ -26,6 +26,7 @@ pub struct Forecast {
 pub struct SavedArea {
     pub name: String,
     pub summit: Point,
+    pub base: Option<Point>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -179,10 +180,28 @@ pub fn add(text: &str, number: usize) -> Result<(), Error> {
     execute(&["add", "--result", &number.to_string(), "--", text]).map(|_| ())
 }
 
-// Waits until the map is closed, and gives the name of the area saved in it, if any.
 pub fn open_map(center: &Point) -> Result<Option<String>, Error> {
+    map(&[degrees(center)])
+}
+
+pub fn edit_map(area: &SavedArea) -> Result<Option<String>, Error> {
+    let mut arguments = vec![
+        String::from("--edit"),
+        area.name.clone(),
+        degrees(&area.summit),
+    ];
+    arguments.extend(area.base.as_ref().map(degrees));
+    map(&arguments)
+}
+
+fn degrees(point: &Point) -> String {
+    format!("{},{}", point.latitude, point.longitude)
+}
+
+// Waits until the map is closed, and gives the name of the area saved in it, if any.
+fn map(arguments: &[String]) -> Result<Option<String>, Error> {
     let output = Command::new(program("montana-map"))
-        .arg(format!("{},{}", center.latitude, center.longitude))
+        .args(arguments)
         .output()
         .map_err(Error::NotFound)?;
     let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -256,7 +275,9 @@ mod tests {
         let areas: Vec<SavedArea> = serde_json::from_str(json).unwrap();
 
         assert_eq!(areas[0].name, "Bödele ski resort");
+        assert!(areas[0].base.is_some());
         assert_eq!(areas[1].summit.latitude, 47.4193);
+        assert!(areas[1].base.is_none());
     }
 
     #[test]

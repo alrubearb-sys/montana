@@ -80,11 +80,13 @@ pub fn choices(areas: &[String], matches: &[usize], found: &[Place]) -> Vec<Choi
     let saved = matches.iter().map(|&index| Choice {
         title: areas[index].as_str().into(),
         detail: SharedString::new(),
+        editable: true,
         removable,
     });
     let found = found.iter().map(|place| Choice {
         title: place.name.as_str().into(),
         detail: place_detail(place).into(),
+        editable: false,
         removable: false,
     });
     saved.chain(found).collect()

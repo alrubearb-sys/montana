@@ -57,11 +57,11 @@ enum Args {
     },
 }
 
-// What Save does: a new area with a name, or new points for a saved one.
-#[derive(Clone, Copy, PartialEq)]
+// What Save does: a new area, or new points and name for the saved area named here.
+#[derive(Clone)]
 enum Task {
     Create,
-    Edit,
+    Edit(String),
 }
 
 enum Message {
@@ -183,7 +183,7 @@ impl MapApp {
         let (task, start, summit, base, name) = match args {
             Args::Create { center } => (Task::Create, position(center), None, None, String::new()),
             Args::Edit { area, summit, base } => (
-                Task::Edit,
+                Task::Edit(area.clone()),
                 position(summit),
                 Some(position(summit)),
                 base.map(position),
@@ -250,11 +250,7 @@ impl MapApp {
     }
 
     fn ready(&self) -> bool {
-        let named = match self.task {
-            Task::Create => !self.name.trim().is_empty(),
-            Task::Edit => true,
-        };
-        self.summit.is_some() && named && !self.saving
+        self.summit.is_some() && !self.name.trim().is_empty() && !self.saving
     }
 
     fn save(&mut self, ctx: &egui::Context) {
@@ -265,7 +261,7 @@ impl MapApp {
         self.problem.clear();
         let name = self.name.trim().to_string();
         let kind = self.kind.clone();
-        let task = self.task;
+        let task = self.task.clone();
         let summit = degrees(summit);
         let base = self.base.map(degrees);
         let sender = self.sender.clone();
@@ -273,7 +269,7 @@ impl MapApp {
         thread::spawn(move || {
             let saved = match task {
                 Task::Create => engine::create(&name, kind.as_deref(), summit, base),
-                Task::Edit => engine::move_area(&name, summit, base),
+                Task::Edit(area) => engine::move_area(&area, &name, summit, base),
             };
             let _ = sender.send(Message::Saved(saved));
             ctx.request_repaint();
@@ -285,7 +281,7 @@ impl MapApp {
         self.memory
             .center_at(position((place.latitude, place.longitude)));
         let _ = self.memory.set_zoom(PLACE_ZOOM);
-        if self.task == Task::Create {
+        if matches!(self.task, Task::Create) {
             self.name = place.name.clone();
             self.kind = Some(place.kind.clone());
         }
@@ -371,21 +367,18 @@ impl MapApp {
                 }
                 ui.horizontal(|ui| {
                     // Drawn like the buttons beside it, so the three read as one row.
-                    // Editing keeps the name, so there is nothing to type.
-                    if self.task == Task::Create {
-                        egui::Frame::NONE
-                            .fill(translucent(mix(0.04), SEE_THROUGH))
-                            .stroke(Stroke::new(1.0, translucent(FOREGROUND, 0.4)))
-                            .inner_margin(egui::Margin::symmetric(10, 6))
-                            .show(ui, |ui| {
-                                ui.add(
-                                    TextEdit::singleline(&mut self.name)
-                                        .hint_text("Name")
-                                        .frame(egui::Frame::NONE)
-                                        .desired_width(200.0),
-                                );
-                            });
-                    }
+                    egui::Frame::NONE
+                        .fill(translucent(mix(0.04), SEE_THROUGH))
+                        .stroke(Stroke::new(1.0, translucent(FOREGROUND, 0.4)))
+                        .inner_margin(egui::Margin::symmetric(10, 6))
+                        .show(ui, |ui| {
+                            ui.add(
+                                TextEdit::singleline(&mut self.name)
+                                    .hint_text("Name")
+                                    .frame(egui::Frame::NONE)
+                                    .desired_width(200.0),
+                            );
+                        });
                     if ui.button("Cancel").clicked() {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                     }

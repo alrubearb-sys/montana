@@ -78,6 +78,9 @@ enum Command {
         /// New base, as latitude,longitude; without it the base stays
         #[arg(long, value_parser = coordinates, allow_hyphen_values = true)]
         base: Option<(f64, f64)>,
+        /// New name for the area
+        #[arg(long)]
+        rename: Option<String>,
     },
     /// List the areas
     Areas {
@@ -104,7 +107,15 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
         (Some(Command::Search { text, json }), _) => search(out, &text, json),
         (Some(Command::Add { text, result, name }), _) => add(out, &text, result, name),
         (Some(Command::Remove { name }), _) => remove(out, &name),
-        (Some(Command::Move { name, summit, base }), _) => move_area(out, &name, summit, base),
+        (
+            Some(Command::Move {
+                name,
+                summit,
+                base,
+                rename,
+            }),
+            _,
+        ) => move_area(out, &name, rename.as_deref(), summit, base),
         (
             Some(Command::Create {
                 name,
@@ -175,10 +186,11 @@ fn create(
 fn move_area(
     out: &mut impl Write,
     name: &str,
+    new_name: Option<&str>,
     summit: (f64, f64),
     base: Option<(f64, f64)>,
 ) -> Result<(), Error> {
-    let area = areas::move_to(name, summit, base)?;
+    let area = areas::move_to(name, new_name, summit, base)?;
     writeln!(out, "Moved: {}", area.name)?;
     output::print_point(out, "Summit", area.summit)?;
     if let Some(base) = area.base {
