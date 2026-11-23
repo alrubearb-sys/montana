@@ -23,13 +23,6 @@ pub struct Area {
     pub base: Option<Point>,
 }
 
-#[expect(dead_code, reason = "used by the ranking in phase 3")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    Ski,
-    Mountain,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Celsius(pub f64);
 

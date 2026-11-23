@@ -19,15 +19,14 @@ más que cualquier app del tiempo, incluido el widget de temperatura que ya trae
 ## Qué es
 
 Herramienta de terminal en Rust, más un módulo de la barra de Omarchy, que dice si merece la pena
-salir a la montaña. Pensada para esquí y también para escalada y alpinismo, con dos modos: esquí y
-montaña.
+salir a la montaña. Pensada para esquí y también para escalada y alpinismo.
 
 Se abre con un clic en la barra, a la derecha del tiempo de Omarchy, y despliega un panel con los
 datos y una gráfica por horas. En el Mac hará lo mismo desde la barra de menús, con el look de Omarchy.
 
-Lo que la diferencia de una app del tiempo (la idea que más me gusta): comparar mis zonas favoritas
-("¿cuál es mejor este sábado?") con un ranking según mis propios criterios. Ejemplo de zona: Bödele
-(Vorarlberg, Austria).
+Lo que la diferencia de una app del tiempo: el tiempo de montaña (cima y base, viento en altura, cota
+de nieve) de mis zonas, elegidas con una búsqueda o en un mapa topográfico. Ejemplo de zona: Bödele
+(Vorarlberg, Austria). El ranking entre zonas se descartó el 2026-11-23: ya no le veía sentido.
 
 Ideas para añadir después:
 
@@ -60,8 +59,7 @@ Sacadas de `docs/buenas-practicas.md` (lo que hacen Zed, ruff, uv, rust-lang y o
 4. Usar enums propios en vez de cadenas o booleanos, y `match` completos sin `_`. Si hay que
    silenciar un aviso de Clippy, usar `#[expect]` y explicarme por qué.
 5. No añadir ni actualizar crates sin preguntarme antes.
-6. En `ranking`, cada regla nueva empieza por un test que falla; los tests de `data` usan JSON
-   guardado de Open-Meteo y del SLF, sin red.
+6. Los tests de `data` usan JSON guardado de Open-Meteo, Nominatim y el SLF, sin red.
 7. Cambios pequeños y solo lo pedido, sin funciones ni archivos extra. Comentarios solo para
    explicar el porqué, nunca sobre la conversación ni sobre la edición.
 8. Añadir una regla a este archivo solo cuando un error se repita, y mantenerlo por debajo de 200
@@ -98,7 +96,6 @@ luz, probabilidad de tormenta, riesgo de aludes.
 
 - `model`: estructuras de zona y pronóstico, enums, tipos propios.
 - `data`: peticiones HTTP async y JSON con serde, errores con `Result`.
-- `ranking`: puntuación de zonas según mis criterios.
 - `output`: CLI con clap y salida JSON. Es el motor común: los paneles solo pintan ese JSON.
 - Panel de Omarchy: plugin QML (`bar-widget` con panel) que corre dentro del shell y llama al motor.
 - Panel del Mac: `bar/` (`montana-bar`), app nativa con Slint dibujando con la CPU. Ejecuta `montana`
@@ -111,13 +108,13 @@ luz, probabilidad de tormenta, riesgo de aludes.
 
 1. CLI que busca un sitio, lo guarda y devuelve su pronóstico, también en JSON.
 2. App de barra para el Mac (va primero porque Alejandro trabaja ahí): icono, y un clic abre el panel.
-3. Ranking comparando varias zonas.
+3. Ranking comparando varias zonas: descartado el 2026-11-23.
 4. Plugin de Omarchy con el mismo panel: botón en la barra, datos y gráfica.
 5. Añadir zonas en dos niveles, para usar el mapa lo menos posible. Primero una lupa en el panel que
    busca una localidad y da una lista. Si hace falta más precisión (cima, base, una pista o un punto
    concreto), se abre el mapa: clic izquierdo la cima y clic derecho la base (opcional). El mapa es un
-   programa aparte que se abre solo para eso y termina al cerrarlo. Nativo en Rust (candidata:
-   `walkers`), midiendo la RAM.
+   programa aparte que se abre solo para eso y termina al cerrarlo. Nativo en Rust con `walkers`
+   (65 MB abierto y quieto, 0 cerrado).
 
 ## Notas del sistema
 
@@ -133,7 +130,3 @@ luz, probabilidad de tormenta, riesgo de aludes.
   `docs/` en castellano.
 - Permiso de Alejandro (2026-11-22): subir cada tarea terminada a `main` cuando fmt, clippy y test
   pasen. Los issues nuevos, los crates y cualquier otra cosa pública se siguen preguntando.
-
-## Pendiente de decidir
-
-- Lista de zonas favoritas y criterios del ranking.
