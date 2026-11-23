@@ -56,6 +56,16 @@ enum Command {
     },
     /// Remove a saved area
     Remove { name: String },
+    /// Move the summit or the base of a saved area
+    Move {
+        name: String,
+        /// New summit, as latitude,longitude
+        #[arg(long, value_parser = coordinates, allow_hyphen_values = true)]
+        summit: (f64, f64),
+        /// New base, as latitude,longitude; without it the base stays
+        #[arg(long, value_parser = coordinates, allow_hyphen_values = true)]
+        base: Option<(f64, f64)>,
+    },
     /// List the areas
     Areas {
         /// Print the names as JSON
@@ -81,6 +91,7 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
         (Some(Command::Search { text, json }), _) => search(out, &text, json),
         (Some(Command::Add { text, result, name }), _) => add(out, &text, result, name),
         (Some(Command::Remove { name }), _) => remove(out, &name),
+        (Some(Command::Move { name, summit, base }), _) => move_area(out, &name, summit, base),
         (Some(Command::Areas { json }), _) => list(out, json),
         (None, Some(area)) if cli.json => show_json(out, &area),
         (None, Some(area)) => show(out, &area),
@@ -123,6 +134,35 @@ fn remove(out: &mut impl Write, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn move_area(
+    out: &mut impl Write,
+    name: &str,
+    summit: (f64, f64),
+    base: Option<(f64, f64)>,
+) -> Result<(), Error> {
+    let area = areas::move_to(name, summit, base)?;
+    writeln!(out, "Moved: {}", area.name)?;
+    output::print_point(out, "Summit", area.summit)?;
+    if let Some(base) = area.base {
+        output::print_point(out, "Base", base)?;
+    }
+    Ok(())
+}
+
+// "47.2494,9.3432" as clap reads it: a message instead of our Error, because clap
+// shows it next to the option.
+fn coordinates(text: &str) -> Result<(f64, f64), String> {
+    let invalid = || format!("expected latitude,longitude in degrees, got {text}");
+    let (latitude, longitude) = text.split_once(',').ok_or_else(invalid)?;
+    let latitude: f64 = latitude.trim().parse().map_err(|_| invalid())?;
+    let longitude: f64 = longitude.trim().parse().map_err(|_| invalid())?;
+    if (-90.0..=90.0).contains(&latitude) && (-180.0..=180.0).contains(&longitude) {
+        Ok((latitude, longitude))
+    } else {
+        Err(invalid())
+    }
+}
+
 fn list(out: &mut impl Write, json: bool) -> Result<(), Error> {
     let names: Vec<String> = areas::all()?.into_iter().map(|area| area.name).collect();
     if json {
@@ -154,4 +194,18 @@ fn report(area: Area) -> Result<Report, Error> {
         base: area.base.map(forecast::request).transpose()?,
         credits: output::WEATHER_CREDIT,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_coordinates() {
+        assert_eq!(coordinates("47.2494,9.3432"), Ok((47.2494, 9.3432)));
+        assert_eq!(coordinates("40.4, -3.7"), Ok((40.4, -3.7)));
+        assert!(coordinates("47.2494").is_err());
+        assert!(coordinates("north,east").is_err());
+        assert!(coordinates("95,9").is_err());
+    }
 }

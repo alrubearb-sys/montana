@@ -6,6 +6,9 @@ use crate::error::Error;
 use crate::model::Meters;
 
 const SWISSTOPO: &str = "https://api3.geo.admin.ch/rest/services/height";
+// West, east, south and north of Switzerland. swisstopo also answers a little
+// beyond the border (Bödele, in Austria: 1456 m), so the box is enough.
+const SWITZERLAND: (f64, f64, f64, f64) = (5.9, 10.6, 45.8, 47.9);
 const OPEN_METEO: &str = "https://api.open-meteo.com/v1/elevation";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,22 +33,44 @@ pub fn find(place: &Place) -> Result<(Meters, Source), Error> {
         return Ok((elevation, Source::OpenStreetMap));
     }
     if place.country_code == "ch" {
-        let (easting, northing) = to_lv95(place.latitude, place.longitude);
-        let json = get(
-            SWISSTOPO,
-            &[
-                ("easting", &format!("{easting:.1}")),
-                ("northing", &format!("{northing:.1}")),
-                ("sr", "2056"),
-            ],
-        )?;
-        return Ok((parse_swisstopo(&json)?, Source::Swisstopo));
+        return swisstopo(place.latitude, place.longitude);
     }
+    open_meteo(place.latitude, place.longitude)
+}
+
+// For a point picked on the map, whose country is not known.
+pub fn at(latitude: f64, longitude: f64) -> Result<(Meters, Source), Error> {
+    if in_switzerland(latitude, longitude) {
+        swisstopo(latitude, longitude).or_else(|_| open_meteo(latitude, longitude))
+    } else {
+        open_meteo(latitude, longitude)
+    }
+}
+
+fn in_switzerland(latitude: f64, longitude: f64) -> bool {
+    let (west, east, south, north) = SWITZERLAND;
+    (west..=east).contains(&longitude) && (south..=north).contains(&latitude)
+}
+
+fn swisstopo(latitude: f64, longitude: f64) -> Result<(Meters, Source), Error> {
+    let (easting, northing) = to_lv95(latitude, longitude);
+    let json = get(
+        SWISSTOPO,
+        &[
+            ("easting", &format!("{easting:.1}")),
+            ("northing", &format!("{northing:.1}")),
+            ("sr", "2056"),
+        ],
+    )?;
+    Ok((parse_swisstopo(&json)?, Source::Swisstopo))
+}
+
+fn open_meteo(latitude: f64, longitude: f64) -> Result<(Meters, Source), Error> {
     let json = get(
         OPEN_METEO,
         &[
-            ("latitude", &place.latitude.to_string()),
-            ("longitude", &place.longitude.to_string()),
+            ("latitude", &latitude.to_string()),
+            ("longitude", &longitude.to_string()),
         ],
     )?;
     Ok((parse_open_meteo(&json)?, Source::OpenMeteo))
@@ -87,6 +112,13 @@ fn to_lv95(latitude: f64, longitude: f64) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn switzerland_box_takes_border_points() {
+        assert!(in_switzerland(47.2494, 9.3432));
+        assert!(in_switzerland(47.4031, 9.8132));
+        assert!(!in_switzerland(42.6311, 0.6567));
+    }
 
     #[test]
     fn reads_swisstopo_height() {

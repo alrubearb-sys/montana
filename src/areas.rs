@@ -114,6 +114,33 @@ pub fn add(text: &str, chosen: usize, name: Option<String>) -> Result<(Area, Sou
     Ok((area, source))
 }
 
+// New summit and, if given, new base for a saved area, with their elevations.
+// Without a new base, the old one stays.
+pub fn move_to(name: &str, summit: (f64, f64), base: Option<(f64, f64)>) -> Result<Area, Error> {
+    let mut areas = all()?;
+    let wanted = name.to_lowercase();
+    let area = areas
+        .iter_mut()
+        .find(|area| area.name.to_lowercase() == wanted)
+        .ok_or_else(|| Error::UnknownArea(name.to_string()))?;
+    area.summit = point_at(summit)?;
+    if let Some(base) = base {
+        area.base = Some(point_at(base)?);
+    }
+    let moved = area.clone();
+    storage::save_areas(&areas)?;
+    Ok(moved)
+}
+
+fn point_at((latitude, longitude): (f64, f64)) -> Result<Point, Error> {
+    let (elevation, _) = elevation::at(latitude, longitude)?;
+    Ok(Point {
+        latitude,
+        longitude,
+        elevation,
+    })
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
