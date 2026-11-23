@@ -73,6 +73,9 @@ pub struct Chart {
     pub rain: String,
     pub ice: String,
     pub ticks: Vec<Tick>,
+    /// Where the line of 0 °C is, from 0 at the top to 1 at the bottom; only in the
+    /// temperature chart.
+    pub zero: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -369,12 +372,15 @@ fn marks(hours: &[&HourlyForecast], offset: i32) -> Vec<Mark> {
 
 fn temperature_chart(hours: &[&HourlyForecast]) -> Chart {
     let values: Vec<f64> = hours.iter().map(|hour| hour.temperature.0).collect();
-    let scale = Scale::around(&values);
-    chart(
-        &[("temperature °C", Tone::Line)],
-        scale,
-        chart::line(&values, scale),
-    )
+    let scale = Scale::temperature(&values);
+    Chart {
+        zero: Some(scale.position(0.0)),
+        ..chart(
+            &[("temperature °C", Tone::Line)],
+            scale,
+            chart::line(&values, scale),
+        )
+    }
 }
 
 fn wind_chart(hours: &[&HourlyForecast]) -> Chart {
@@ -429,6 +435,7 @@ fn chart(legend: &[(&str, Tone)], scale: Scale, line: String) -> Chart {
                 text: whole(value),
             })
             .collect(),
+        zero: None,
     }
 }
 
@@ -565,7 +572,9 @@ mod tests {
         );
         assert!(panel.precipitation.rain.is_empty());
         assert!(!panel.precipitation.snow.is_empty());
-        assert_eq!(panel.temperature.ticks.len(), 2);
+        assert_eq!(panel.temperature.ticks.len(), 5);
+        assert_eq!(panel.temperature.zero, Some(0.25));
+        assert_eq!(panel.wind.zero, None);
     }
 
     #[test]

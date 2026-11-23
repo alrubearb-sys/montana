@@ -4,6 +4,10 @@ pub const WIDTH: f64 = 370.0;
 pub const HEIGHT: f64 = 68.0;
 const STEPS: [f64; 8] = [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0];
 const MAX_STEPS: f64 = 4.0;
+// A degree is as tall in every place, so that a warm day and a cold one do not
+// look alike.
+const TEMPERATURE_SPAN: f64 = 20.0;
+const TEMPERATURE_STEP: f64 = 5.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Scale {
@@ -13,13 +17,19 @@ pub struct Scale {
 }
 
 impl Scale {
-    pub fn around(values: &[f64]) -> Self {
+    /// `TEMPERATURE_SPAN` degrees around the values, wider only when they need
+    /// it, and always with 0 to show on which side of freezing they are.
+    pub fn temperature(values: &[f64]) -> Self {
         let low = values.iter().copied().fold(f64::INFINITY, f64::min);
         let high = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         if !low.is_finite() || !high.is_finite() {
-            return Self::between(0.0, 1.0);
+            return Self::between(-TEMPERATURE_SPAN / 2.0, TEMPERATURE_SPAN / 2.0);
         }
-        Self::between(low, high)
+        let middle = (low + high) / 2.0;
+        let bottom =
+            ((middle - TEMPERATURE_SPAN / 2.0) / TEMPERATURE_STEP).floor() * TEMPERATURE_STEP;
+        let top = bottom + TEMPERATURE_SPAN;
+        Self::between(bottom.min(low).min(0.0), top.max(high).max(0.0))
     }
 
     pub fn from_zero(values: &[f64], at_least: f64) -> Self {
@@ -94,20 +104,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn temperature_has_the_same_span_everywhere() {
+        let st_gallen = Scale::temperature(&[0.2, 2.1]);
+        let spain = Scale::temperature(&[9.0, 11.4]);
+
+        assert_eq!(st_gallen.ticks(), [-10.0, -5.0, 0.0, 5.0, 10.0]);
+        assert_eq!(spain.ticks(), [0.0, 5.0, 10.0, 15.0, 20.0]);
+    }
+
+    #[test]
+    fn temperature_keeps_zero_and_widens_for_big_swings() {
+        assert_eq!(
+            Scale::temperature(&[24.0, 27.0]).ticks(),
+            [0.0, 10.0, 20.0, 30.0, 40.0]
+        );
+        assert_eq!(
+            Scale::temperature(&[-14.0, 9.0]).ticks(),
+            [-20.0, -10.0, 0.0, 10.0]
+        );
+        assert_eq!(
+            Scale::temperature(&[]).ticks(),
+            [-10.0, -5.0, 0.0, 5.0, 10.0]
+        );
+    }
+
+    #[test]
     fn scale_has_round_ticks() {
-        assert_eq!(Scale::around(&[-3.2, 4.1]).ticks(), [-5.0, 0.0, 5.0]);
-        assert_eq!(Scale::around(&[0.2, 2.9]).ticks(), [0.0, 1.0, 2.0, 3.0]);
         assert_eq!(Scale::from_zero(&[0.0, 0.3], 1.0).ticks(), [0.0, 1.0]);
         assert_eq!(
             Scale::from_zero(&[73.0], 1.0).ticks(),
             [0.0, 20.0, 40.0, 60.0, 80.0]
         );
-    }
-
-    #[test]
-    fn flat_and_empty_values_have_a_scale() {
-        assert_eq!(Scale::around(&[2.0, 2.0]).ticks(), [2.0, 3.0]);
-        assert_eq!(Scale::around(&[]).ticks(), [0.0, 1.0]);
     }
 
     #[test]
