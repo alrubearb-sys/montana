@@ -1,0 +1,94 @@
+# Runs when ./release pushes a tag such as v1.1.0: builds the programs for Linux
+# and the Mac, publishes them as a GitHub release and updates the Homebrew cask.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable --no-self-update && rustup default stable
+      - run: cargo build --release -p peakcast -p peakcast-map
+      - name: Package
+        run: |
+          name="peakcast-${GITHUB_REF_NAME#v}-${{ matrix.arch }}-linux"
+          mkdir "$name"
+          cp target/release/peakcast target/release/peakcast-map LICENSE-MIT LICENSE-APACHE README.md "$name/"
+          tar czf "$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: "*.tar.gz"
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable --no-self-update && rustup default stable
+      - run: bash bar/bundle.sh --no-install
+      - name: Package
+        run: ditto -c -k --keepParent target/Peakcast.app "Peakcast-${GITHUB_REF_NAME#v}-macos-arm64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: "*.zip"
+
+  release:
+    needs: [linux, macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Peakcast ${GITHUB_REF_NAME#v}" \
+            --generate-notes
+
+  homebrew:
+    needs: release
+    runs-on: ubuntu-24.04
+    env:
+      # A token that can push to alrubearb-sys/homebrew-peakcast, set as a secret.
+      TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - if: env.TAP_TOKEN == ''
+        run: echo "::warning::TAP_TOKEN is not set, so the Homebrew cask was not updated"
+      - if: env.TAP_TOKEN != ''
+        uses: actions/checkout@v4
+      - if: env.TAP_TOKEN != ''
+        name: Update the cask
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          zip="Peakcast-$version-macos-arm64.zip"
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$zip"
+          sha256=$(sha256sum "$zip" | cut -d ' ' -f 1)
+          git clone "https://x-access-token:$TAP_TOKEN@github.com/alrubearb-sys/homebrew-peakcast.git" tap
+          mkdir -p tap/Casks
+          sed -e "s/@VERSION@/$version/" -e "s/@SHA256@/$sha256/" packaging/homebrew/peakcast.rb > tap/Casks/peakcast.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/peakcast.rb
+          git commit --message "Peakcast $version"
+          git push
