@@ -296,9 +296,11 @@ impl MapApp {
     fn map(&mut self, ui: &mut egui::Ui) {
         let summit = &mut self.summit;
         let base = &mut self.base;
-        Map::new(Some(&mut self.tiles), &mut self.memory, self.start).show(
-            ui,
-            |ui, response, projector, _memory| {
+        Map::new(Some(&mut self.tiles), &mut self.memory, self.start)
+            // A mouse wheel zooms; on the Mac the trackpad zooms with a pinch and
+            // its two-finger scroll moves the map, as walkers does by default.
+            .zoom_with_ctrl(cfg!(target_os = "macos"))
+            .show(ui, |ui, response, projector, _memory| {
                 if let Some(pointer) = response.interact_pointer_pos() {
                     let at = projector.unproject(pointer.to_vec2());
                     if response.clicked() {
@@ -314,8 +316,7 @@ impl MapApp {
                 if let Some(at) = *summit {
                     mark(painter, projector.project(at).to_pos2(), "Summit", RED);
                 }
-            },
-        );
+            });
     }
 
     fn search_box(&mut self, ctx: &egui::Context) {
@@ -376,12 +377,18 @@ impl MapApp {
                         .stroke(Stroke::new(1.0, translucent(FOREGROUND, 0.4)))
                         .inner_margin(egui::Margin::symmetric(10, 6))
                         .show(ui, |ui| {
-                            ui.add(
+                            let field = ui.add(
                                 TextEdit::singleline(&mut self.name)
                                     .hint_text("Name")
                                     .frame(egui::Frame::NONE)
                                     .desired_width(200.0),
                             );
+                            // Enter in the name does what Save does, which waits for
+                            // a summit and a name.
+                            if field.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter))
+                            {
+                                self.save(ui.ctx());
+                            }
                         });
                     if ui.button("Cancel").clicked() {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
