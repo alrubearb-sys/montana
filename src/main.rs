@@ -1,18 +1,21 @@
 mod areas;
+mod clock;
 mod data;
 mod error;
 mod model;
 mod output;
+mod panel;
 mod storage;
 
 use std::io::{self, ErrorKind, Write};
 use std::process::ExitCode;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, Subcommand};
 
 use crate::data::forecast;
 use crate::error::Error;
-use crate::model::Area;
+use crate::model::{Area, UnixTime};
 use crate::output::{Report, SearchResults};
 
 /// Should I go to the mountains?
@@ -82,6 +85,8 @@ enum Command {
         #[arg(long)]
         rename: Option<String>,
     },
+    /// Print what the panels show for an area, as JSON
+    Panel { area: String },
     /// List the areas
     Areas {
         /// Print the names as JSON
@@ -125,6 +130,7 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
             }),
             _,
         ) => create(out, &name, kind, summit, base),
+        (Some(Command::Panel { area }), _) => show_panel(out, &area),
         (Some(Command::Areas { json }), _) => list(out, json),
         (None, Some(area)) if cli.json => show_json(out, &area),
         (None, Some(area)) => show(out, &area),
@@ -236,6 +242,20 @@ fn show(out: &mut impl Write, name: &str) -> Result<(), Error> {
 fn show_json(out: &mut impl Write, name: &str) -> Result<(), Error> {
     writeln!(out, "{}", output::to_json(&report(areas::find(name)?)?)?)?;
     Ok(())
+}
+
+fn show_panel(out: &mut impl Write, name: &str) -> Result<(), Error> {
+    let report = report(areas::find(name)?)?;
+    writeln!(out, "{}", output::to_json(&panel::build(&report, now()))?)?;
+    Ok(())
+}
+
+// A clock before 1970 would be broken; it then counts as 1970.
+fn now() -> UnixTime {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    UnixTime(i64::try_from(seconds).unwrap_or(i64::MAX))
 }
 
 fn report(area: Area) -> Result<Report, Error> {

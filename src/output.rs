@@ -2,10 +2,11 @@ use std::io::{self, Write};
 
 use serde::Serialize;
 
+use crate::clock::{clock, weekday};
 use crate::data::elevation::Source;
 use crate::data::search::Place;
 use crate::error::Error;
-use crate::model::{Forecast, HourlyForecast, Point, UnixTime};
+use crate::model::{Forecast, HourlyForecast, Point};
 
 pub const WEATHER_CREDIT: &str = "Weather data by Open-Meteo (CC BY 4.0)";
 pub const SEARCH_CREDIT: &str = "Search data © OpenStreetMap contributors (ODbL)";
@@ -110,25 +111,6 @@ fn print_hour(out: &mut impl Write, hour: &HourlyForecast, offset: i32) -> io::R
     Ok(())
 }
 
-fn weekday(time: UnixTime, offset: i32) -> &'static str {
-    let days = (time.0 + i64::from(offset)).div_euclid(86_400);
-    // 1 January 1970 was a Thursday.
-    match days.rem_euclid(7) {
-        0 => "Thu",
-        1 => "Fri",
-        2 => "Sat",
-        3 => "Sun",
-        4 => "Mon",
-        5 => "Tue",
-        _ => "Wed",
-    }
-}
-
-fn clock(time: UnixTime, offset: i32) -> String {
-    let seconds = (time.0 + i64::from(offset)).rem_euclid(86_400);
-    format!("{:02}:{:02}", seconds / 3600, seconds % 3600 / 60)
-}
-
 pub fn credit(source: Source) -> &'static str {
     match source {
         Source::OpenStreetMap => "© OpenStreetMap contributors (ODbL)",
@@ -144,17 +126,8 @@ mod tests {
     use super::*;
     use crate::model::{
         Celsius, Centimeters, Daylight, KilometersPerHour, Meters, Millimeters, Percent, Sky,
+        UnixTime,
     };
-
-    #[test]
-    fn shows_local_day_and_time() {
-        let midnight = UnixTime(1795302000);
-
-        assert_eq!(weekday(midnight, 3600), "Sun");
-        assert_eq!(clock(midnight, 3600), "00:00");
-        assert_eq!(weekday(midnight, 0), "Sat");
-        assert_eq!(clock(midnight, 0), "23:00");
-    }
 
     #[test]
     fn search_json_lists_places_with_credits() {

@@ -42,7 +42,8 @@ pub struct Percent(pub u8);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct UnixTime(pub i64);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+// From better to worse: the panel picks the worse sky between two equally usual ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Sky {
     Clear,
@@ -88,6 +89,48 @@ pub struct HourlyForecast {
     pub snow_line: Option<Meters>,
     #[serde(rename = "precipitation_probability_percent")]
     pub precipitation_probability: Option<Percent>,
+}
+
+/// What falls during most of an hour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fall {
+    Nothing,
+    Rain,
+    Freezing,
+    Snow,
+}
+
+// Open-Meteo counts 7 cm of fresh snow as 10 mm of water.
+const WATER_MM_PER_SNOW_CM: f64 = 10.0 / 7.0;
+
+impl HourlyForecast {
+    /// The wind at the height of the point when the forecast has it.
+    pub fn best_wind(&self) -> f64 {
+        self.high_wind.unwrap_or(self.wind).0
+    }
+
+    /// The amounts decide. When they do not point to snow, the sky does.
+    pub fn fall(&self) -> Fall {
+        if self.precipitation.0 <= 0.0 {
+            return Fall::Nothing;
+        }
+        if self.fresh_snow.0 * WATER_MM_PER_SNOW_CM * 2.0 >= self.precipitation.0 {
+            return Fall::Snow;
+        }
+        match self.sky {
+            Sky::FreezingDrizzle | Sky::FreezingRain => Fall::Freezing,
+            Sky::Snow | Sky::SnowShowers if self.temperature.0 <= 0.0 => Fall::Snow,
+            Sky::Clear
+            | Sky::Cloudy
+            | Sky::Fog
+            | Sky::Drizzle
+            | Sky::Rain
+            | Sky::Snow
+            | Sky::RainShowers
+            | Sky::SnowShowers
+            | Sky::Thunderstorm => Fall::Rain,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
