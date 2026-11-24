@@ -3,6 +3,7 @@
 #
 # Sets the version, checks the code, commits, tags v1.1.0 and pushes. GitHub
 # Actions then builds the programs, makes the release and updates Homebrew.
+# Once that has worked, the Omarchy plugin in omarchy/ gets the same version.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -18,6 +19,19 @@ version=${1:-}
 git fetch --quiet origin
 [[ $(git rev-parse HEAD) == $(git rev-parse origin/main) ]] || fail "main differs from GitHub: pull or push first"
 ! git rev-parse --quiet --verify "refs/tags/v$version" >/dev/null || fail "v$version already exists"
+
+# Checked before anything changes, so that a release never stops halfway. Not
+# `git -C omarchy`: without its own .git, that would find this repository.
+plugin=omarchy
+if [[ -d $plugin/.git ]]; then
+  git -C "$plugin" fetch --quiet origin
+  [[ $(git -C "$plugin" branch --show-current) == main ]] || fail "$plugin: switch to main first"
+  [[ -z $(git -C "$plugin" status --porcelain --untracked-files=no) ]] || fail "$plugin: commit or drop your changes first"
+  [[ $(git -C "$plugin" rev-parse HEAD) == $(git -C "$plugin" rev-parse origin/main) ]] || fail "$plugin: main differs from GitHub: pull or push first"
+else
+  echo "release: $plugin/ is not a clone of the plugin here, so only the engine is released" >&2
+  plugin=""
+fi
 
 # The only version line in the root Cargo.toml is the shared one.
 perl -pi -e "s/^version = \".*\"\$/version = \"$version\"/" Cargo.toml
@@ -36,3 +50,53 @@ git commit --quiet --all --message "Release $version"
 git tag --annotate "v$version" --message "Peakcast $version"
 git push --quiet origin main "v$version"
 echo "Peakcast $version is on its way: https://github.com/alrubearb-sys/peakcast/actions"
+[[ -n $plugin ]] || exit 0
+
+# The plugin reads what this engine prints, so it goes out only once the engine
+# is released: a plugin update reaches everyone as soon as it is on main.
+echo "Waiting for GitHub to build and release it..."
+run=""
+for _ in {1..30}; do
+  run=$(gh run list --workflow release.yml --branch "v$version" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+  [[ -n $run ]] && break
+  sleep 5
+done
+[[ -n $run ]] || fail "no release run for v$version on GitHub; the plugin is still at its old version"
+gh run watch "$run" --exit-status --interval 30 >/dev/null ||
+  fail "the release run failed (gh run view $run --log-failed); the plugin is still at its old version"
+
+perl -pi -e "s/\"version\": \".*?\"/\"version\": \"$version\"/" "$plugin/manifest.json"
+git -C "$plugin" commit --quiet --all --message "Peakcast $version"
+git -C "$plugin" push --quiet origin main
+commit=$(git -C "$plugin" rev-parse HEAD)
+echo "The Omarchy plugin is at $version too."
+
+# Opening issues on the marketplace is left to a person.
+request="${TMPDIR:-/tmp}/peakcast-verify-$version.md"
+cat >"$request" <<REQUEST
+### Verification action
+
+Verify and publish a newer upstream commit
+
+### Plugin ID
+
+io.github.alrubearb-sys.peakcast
+
+### Repository URL
+
+https://github.com/alrubearb-sys/peakcast-omarchy
+
+### Target commit
+
+$commit
+
+### Verification acknowledgment
+
+- [x] I understand that only the exact target commit can become a verified marketplace snapshot and that verification is not a security audit.
+
+### Standard installation acknowledgment
+
+- [ ] I confirm that this listed root plugin supports the standard Omarchy installation path and does not require manual setup.
+REQUEST
+echo "To show it on the marketplace, ask for its verification:"
+echo "  gh issue create -R omacom/omarchy-plugin-marketplace --title \"[Verify]: Peakcast $version\" --body-file $request"
