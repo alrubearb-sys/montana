@@ -2,6 +2,7 @@
 name = "peakcast"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "Mountain weather for the places you go: finds them, keeps them and prints their forecast."
 license.workspace = true
 repository.workspace = true
@@ -24,6 +25,8 @@ default-members = ["."]
 [workspace.package]
 version = "0.4.2"
 edition = "2024"
+# Duration::from_hours and from_mins.
+rust-version = "1.91"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/alrubearb-sys/peakcast"
 

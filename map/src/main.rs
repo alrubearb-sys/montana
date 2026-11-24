@@ -247,9 +247,12 @@ impl MapApp {
         self.clear_results();
     }
 
+    // A search still running stays so: its answer is on the way.
     fn clear_results(&mut self) {
         self.places.clear();
-        self.search = Search::Idle;
+        if matches!(self.search, Search::Done) {
+            self.search = Search::Idle;
+        }
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {

@@ -12,6 +12,8 @@ pub struct Place {
     pub kind: String,
     pub latitude: f64,
     pub longitude: f64,
+    // Older engines do not write it.
+    #[serde(default)]
     pub detail: String,
 }
 
@@ -102,4 +104,26 @@ fn program() -> OsString {
         .map(|path| path.with_file_name("peakcast"))
         .filter(|path| path.is_file())
         .map_or_else(|| OsString::from("peakcast"), OsString::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_found_places_with_their_detail() {
+        let json = r#"{"places": [{"name": "Säntis", "kind": "peak",
+            "description": "Säntis, Schwende-Rüte, Switzerland", "country_code": "ch",
+            "latitude": 47.2494, "longitude": 9.3432, "elevation": 2502.0,
+            "detail": "peak · 2502 m · Schwende-Rüte, Switzerland"}],
+            "credits": "Search data © OpenStreetMap contributors (ODbL)"}"#;
+
+        let results: SearchResults = serde_json::from_str(json).unwrap();
+
+        assert_eq!(results.places[0].name, "Säntis");
+        assert_eq!(
+            results.places[0].detail,
+            "peak · 2502 m · Schwende-Rüte, Switzerland"
+        );
+    }
 }

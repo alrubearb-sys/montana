@@ -314,10 +314,16 @@ impl App {
         self.picker.searched.replace(text.to_string());
         self.show_choices();
         let typed = text.to_string();
+        let asked = text.to_string();
         in_background(
             move || engine::search(&typed),
-            |app, result| {
+            move |app, result| {
                 app.picker.searching.set(false);
+                // What was typed changed while it searched: these places answer
+                // another text, and picking one would add the wrong place.
+                if *app.picker.searched.borrow() != asked {
+                    return;
+                }
                 match result {
                     Ok(places) => {
                         app.picker.found.replace(places);

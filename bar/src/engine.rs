@@ -92,6 +92,8 @@ pub struct SavedArea {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Place {
     pub name: String,
+    // Older engines do not write it.
+    #[serde(default)]
     pub detail: String,
 }
 
@@ -236,6 +238,23 @@ fn program(name: &str) -> OsString {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_found_places_with_their_detail() {
+        let json = r#"{"places": [{"name": "Säntis", "kind": "peak",
+            "description": "Säntis, Schwende-Rüte, Switzerland", "country_code": "ch",
+            "latitude": 47.2494, "longitude": 9.3432, "elevation": 2502.0,
+            "detail": "peak · 2502 m · Schwende-Rüte, Switzerland"}],
+            "credits": "Search data © OpenStreetMap contributors (ODbL)"}"#;
+
+        let results: SearchResults = serde_json::from_str(json).unwrap();
+
+        assert_eq!(results.places[0].name, "Säntis");
+        assert_eq!(
+            results.places[0].detail,
+            "peak · 2502 m · Schwende-Rüte, Switzerland"
+        );
+    }
 
     #[test]
     fn reads_saved_areas() {

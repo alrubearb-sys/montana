@@ -2,6 +2,7 @@
 name = "peakcast-bar"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "Mac menu bar panel for peakcast."
 license.workspace = true
 publish = false
