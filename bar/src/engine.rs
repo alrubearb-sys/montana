@@ -25,6 +25,9 @@ pub struct Panel {
     // Older engines do not write it.
     #[serde(default)]
     pub version: String,
+    /// What goes next to the icon in the menu bar; older engines do not write it.
+    #[serde(default)]
+    pub bar: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -134,6 +137,11 @@ pub fn areas() -> Result<Vec<SavedArea>, Error> {
 
 pub fn panel(area: &str) -> Result<Panel, Error> {
     run(&["panel", "--", area])
+}
+
+// Of the first area, the default one.
+pub fn bar() -> Result<String, Error> {
+    run::<Panel>(&["panel"]).map(|panel| panel.bar)
 }
 
 pub fn search(text: &str) -> Result<Vec<Place>, Error> {

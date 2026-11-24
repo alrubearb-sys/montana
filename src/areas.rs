@@ -23,6 +23,11 @@ fn or_default(areas: Vec<Area>) -> Vec<Area> {
     }
 }
 
+/// The default area: the one the panels open on.
+pub fn first() -> Result<Area, Error> {
+    Ok(all()?.into_iter().next().unwrap_or_else(boedele))
+}
+
 pub fn remove(name: &str) -> Result<Area, Error> {
     let (areas, removed) = without(all()?, name)?;
     storage::save_areas(&areas)?;

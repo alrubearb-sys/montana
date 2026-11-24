@@ -1,7 +1,7 @@
 import { Palette } from "std-widgets.slint";
 // Omarchy's system font, embedded so the panel looks the same on a Mac without it.
 import "fonts/JetBrainsMono-Regular.ttf";
-import { Omarchy, Style, Theme, Label, Value, Separator, Button, MapButton, Picker } from "theme.slint";
+import { Omarchy, Style, Theme, Label, Value, Separator, Button, MapButton, Picker, Switch } from "theme.slint";
 import { Chart, Legend, Mark, Plot, Tick, Tone } from "chart.slint";
 
 export struct Spot { label: string, height: string, sky: string, temperature: string, wind: string }
@@ -10,7 +10,9 @@ export struct Choice { title: string, detail: string, editable: bool, removable:
 
 export component Tray inherits SystemTrayIcon {
     callback open <=> root.clicked;
-    title: "";
+    // The temperature next to the icon, when the switch of the panel is on.
+    in property <string> text;
+    title: root.text;
     tooltip: "Peakcast";
     icon: Palette.color-scheme == ColorScheme.dark ? @image-url("mountain-white.svg") : @image-url("mountain-black.svg");
 }
@@ -38,6 +40,9 @@ export component Panel inherits Window {
     in property <string> new-version;
     // Of the engine, so that it shows whether this is the newest release.
     in property <string> version;
+    // The temperature next to the icon in the menu bar.
+    in property <bool> show-temperature;
+    callback toggle-temperature;
     callback choose(int);
     callback remove(int);
     callback move-area(int, int);
@@ -255,6 +260,8 @@ export component Panel inherits Window {
             HorizontalLayout {
                 spacing: Style.row-gap;
                 Label { text: root.updated; vertical-alignment: center; horizontal-stretch: 1; }
+                Label { text: "temp in bar"; vertical-alignment: center; }
+                Switch { checked: root.show-temperature; toggled => { root.toggle-temperature(); } }
                 Button { text: "refresh"; clicked => { root.refresh(); } }
                 Button { text: "quit"; clicked => { root.quit(); } }
             }

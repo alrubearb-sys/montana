@@ -5,13 +5,14 @@ mod view;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
-use slint::{ComponentHandle, LogicalPosition, PlatformError, Timer};
+use slint::{ComponentHandle, LogicalPosition, PlatformError, Timer, TimerMode};
 
 use crate::engine::{Error, Place, SavedArea};
 
@@ -26,6 +27,8 @@ const MAX_AGE_SECONDS: i64 = 3600;
 const SAME_CLICK: Duration = Duration::from_millis(300);
 // As often as Omarchy looks for its own updates, and only when the panel opens.
 const CHECK_EVERY: Duration = Duration::from_hours(6);
+// The temperature in the menu bar: the forecast is by the hour.
+const BAR_EVERY: Duration = Duration::from_mins(30);
 
 thread_local! {
     static APP: RefCell<Option<Rc<App>>> = const { RefCell::new(None) };
@@ -51,6 +54,9 @@ struct App {
     // A newer release, from `peakcast outdated`; empty when this one is the newest.
     new_version: RefCell<String>,
     checked_at: Cell<Option<Instant>>,
+    // The temperature next to the icon, from the switch of the panel.
+    show_temperature: Cell<bool>,
+    bar_timer: Timer,
 }
 
 // The area picker: saved areas that match what was typed, then places found.
@@ -110,12 +116,15 @@ fn run() -> Result<(), PlatformError> {
         had_focus: Cell::new(false),
         new_version: RefCell::default(),
         checked_at: Cell::new(None),
+        show_temperature: Cell::new(temperature_shown()),
+        bar_timer: Timer::default(),
     });
     app.tray.on_open(|| with_app(App::toggle));
     APP.with(|slot| slot.replace(Some(Rc::clone(&app))));
 
     app.tray.show()?;
-    // Nothing runs while the panel is closed: the data is asked for when it opens.
+    // Nothing else runs while the panel is closed: the data is asked for when it opens.
+    app.watch_temperature();
     slint::run_event_loop_until_quit()
 }
 
@@ -162,6 +171,7 @@ fn connect(panel: &Panel) {
     panel.on_refresh(|| with_app(App::fetch));
     panel.on_open_map(|| with_app(App::open_map));
     panel.on_update(|| with_app(App::update));
+    panel.on_toggle_temperature(|| with_app(App::toggle_temperature));
     panel.on_dismiss(|| with_app(App::close));
     panel.on_quit(|| {
         // It only fails when the loop has already ended.
@@ -231,6 +241,38 @@ impl App {
         in_background(engine::outdated, |app, version| {
             app.new_version.replace(version.unwrap_or_default());
             app.show_selected();
+        });
+    }
+
+    fn toggle_temperature(&self) {
+        let on = !self.show_temperature.get();
+        if let Err(error) = save_temperature_shown(on) {
+            eprintln!("Error: cannot keep the switch: {error}");
+        }
+        self.show_temperature.set(on);
+        self.watch_temperature();
+        self.show_selected();
+    }
+
+    fn watch_temperature(&self) {
+        if self.show_temperature.get() {
+            self.bar_timer
+                .start(TimerMode::Repeated, BAR_EVERY, || with_app(App::fetch_bar));
+            self.fetch_bar();
+        } else {
+            self.bar_timer.stop();
+            self.tray.set_text("".into());
+        }
+    }
+
+    fn fetch_bar(&self) {
+        if !self.show_temperature.get() {
+            return;
+        }
+        in_background(engine::bar, |app, result| match result {
+            Ok(text) if app.show_temperature.get() => app.tray.set_text(text.into()),
+            Ok(_) => {}
+            Err(error) => eprintln!("Error: {error}"),
         });
     }
 
@@ -474,6 +516,7 @@ impl App {
         in_background(engine::areas, move |app, result| match result {
             Ok(saved) => {
                 let areas: Vec<String> = saved.iter().map(|area| area.name.clone()).collect();
+                let first_changed = app.areas.borrow().first() != areas.first();
                 app.saved_areas.replace(saved);
                 let previous = wanted.or_else(|| app.selected_area());
                 let index = areas
@@ -486,6 +529,9 @@ impl App {
                 app.selected.set(index.unwrap_or(0));
                 app.show_selected();
                 app.refresh_if_old();
+                if first_changed {
+                    app.fetch_bar();
+                }
             }
             Err(error) => app.report_problem(&error),
         });
@@ -525,6 +571,10 @@ impl App {
         }
         match result {
             Ok(panel) => {
+                let first = self.areas.borrow().first().map(String::as_str) == Some(area);
+                if first && self.show_temperature.get() {
+                    self.tray.set_text(panel.bar.as_str().into());
+                }
                 self.stored.set(self.stored.get() + 1);
                 let saved = Saved {
                     panel,
@@ -551,6 +601,7 @@ impl App {
         };
         panel.set_problem(self.problem.borrow().as_str().into());
         panel.set_new_version(self.new_version.borrow().as_str().into());
+        panel.set_show_temperature(self.show_temperature.get());
         let Some(area) = self.selected_area() else {
             return;
         };
@@ -653,6 +704,35 @@ fn now() -> i64 {
         .ok()
         .and_then(|elapsed| i64::try_from(elapsed.as_secs()).ok())
         .unwrap_or(0)
+}
+
+// The switch is kept as a file that is there while it is on: the app has nothing
+// else to save.
+fn temperature_file() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| {
+        PathBuf::from(home).join("Library/Application Support/Peakcast/temperature-in-bar")
+    })
+}
+
+fn temperature_shown() -> bool {
+    temperature_file().is_some_and(|file| file.exists())
+}
+
+fn save_temperature_shown(on: bool) -> std::io::Result<()> {
+    let Some(file) = temperature_file() else {
+        return Ok(());
+    };
+    if on {
+        if let Some(folder) = file.parent() {
+            std::fs::create_dir_all(folder)?;
+        }
+        std::fs::write(file, "")
+    } else {
+        match std::fs::remove_file(file) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            other => other,
+        }
+    }
 }
 
 // Installed in /Applications, the app starts itself at login from then on: the

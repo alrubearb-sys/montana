@@ -84,6 +84,31 @@ export component Button inherits Rectangle {
     }
 }
 
+// Omarchy's on/off switch (shell/Ui/ToggleSwitch.qml): a track whose knob slides to
+// the right when on, with the fills and borders of its normal and selected states.
+export component Switch inherits Rectangle {
+    in property <bool> checked;
+    callback toggled;
+    width: 42px;
+    height: 22px;
+    background: Theme.text.with-alpha(root.checked ? 0.18 : 0.04);
+    border-width: 1px;
+    border-color: Theme.text.with-alpha(root.checked ? 1.0 : 0.4);
+    animate background { duration: 120ms; }
+    Rectangle {
+        width: 16px;
+        height: 16px;
+        x: root.checked ? parent.width - self.width - 3px : 3px;
+        y: (parent.height - self.height) / 2;
+        background: root.checked ? Theme.text : Theme.text.darker(0.25);
+        animate x { duration: 120ms; easing: cubic-bezier(0.33, 1, 0.68, 1); }
+    }
+    TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
 // A square control with a folded map drawn on it: the panel font has no icons.
 export component MapButton inherits Rectangle {
     callback clicked;

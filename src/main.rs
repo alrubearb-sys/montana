@@ -93,7 +93,10 @@ enum Command {
         position: u16,
     },
     /// Print what the panels show for an area, as JSON
-    Panel { area: String },
+    Panel {
+        /// Area to show; the first one, the default, if left out
+        area: Option<String>,
+    },
     /// Print the newest version if there is one; nothing if this one is the newest
     Outdated,
     /// List the areas
@@ -140,7 +143,7 @@ fn run(cli: Cli, out: &mut impl Write) -> Result<(), Error> {
             _,
         ) => create(out, &name, kind, summit, base),
         (Some(Command::Order { name, position }), _) => order(out, &name, position.into()),
-        (Some(Command::Panel { area }), _) => show_panel(out, &area),
+        (Some(Command::Panel { area }), _) => show_panel(out, area.as_deref()),
         (Some(Command::Areas { json }), _) => list(out, json),
         (Some(Command::Outdated), _) => outdated(out),
         (None, Some(area)) if cli.json => show_json(out, &area),
@@ -270,8 +273,12 @@ fn show_json(out: &mut impl Write, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn show_panel(out: &mut impl Write, name: &str) -> Result<(), Error> {
-    let report = report(areas::find(name)?)?;
+fn show_panel(out: &mut impl Write, name: Option<&str>) -> Result<(), Error> {
+    let area = match name {
+        Some(name) => areas::find(name)?,
+        None => areas::first()?,
+    };
+    let report = report(area)?;
     writeln!(out, "{}", output::to_json(&panel::build(&report, now()))?)?;
     Ok(())
 }

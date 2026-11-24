@@ -20,6 +20,8 @@ pub struct Panel {
     /// Of the summit, for the times shown with the panel.
     pub utc_offset_seconds: i64,
     pub daylight: String,
+    /// What goes next to the icon in the bar: the temperature at the top now.
+    pub bar: String,
     pub snow_line: String,
     pub freezing_level: String,
     pub snow_depth: String,
@@ -126,6 +128,7 @@ pub fn build(report: &Report, now: UnixTime) -> Panel {
     Panel {
         name: report.name.clone(),
         daylight: daylight(summit, now),
+        bar: current.map_or(dash(), |hour| format!("{}°", whole(hour.temperature.0))),
         snow_line: meters(current.and_then(|hour| hour.snow_line.map(|line| line.0))),
         freezing_level: meters(current.map(|hour| hour.freezing_level.0)),
         snow_depth: current.map_or(dash(), |hour| {
@@ -558,6 +561,7 @@ mod tests {
 
         assert_eq!(panel.spots.len(), 1);
         assert_eq!(panel.spots[0].temperature, "0 °C");
+        assert_eq!(panel.bar, "0°");
         assert_eq!(panel.spots[0].wind, "30 km/h");
         assert_eq!(panel.snow_line, "-");
         assert_eq!(panel.snow_depth, "14 cm");
