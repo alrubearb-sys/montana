@@ -8,6 +8,8 @@ const MAX_STEPS: f64 = 4.0;
 // look alike.
 const TEMPERATURE_SPAN: f64 = 20.0;
 const TEMPERATURE_STEP: f64 = 5.0;
+// Space on each side of a bar, as a part of its hour, so that bars never touch.
+const BAR_GAP: f64 = 0.1;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Scale {
@@ -25,7 +27,7 @@ impl Scale {
         if !low.is_finite() || !high.is_finite() {
             return Self::between(-TEMPERATURE_SPAN / 2.0, TEMPERATURE_SPAN / 2.0);
         }
-        let middle = (low + high) / 2.0;
+        let middle = f64::midpoint(low, high);
         let bottom =
             ((middle - TEMPERATURE_SPAN / 2.0) / TEMPERATURE_STEP).floor() * TEMPERATURE_STEP;
         let top = bottom + TEMPERATURE_SPAN;
@@ -81,8 +83,8 @@ pub fn bars(values: &[f64], scale: Scale) -> String {
     let slot = slot(values);
     let mut path = String::new();
     for (index, value) in values.iter().enumerate().filter(|(_, value)| **value > 0.0) {
-        let left = (position(index) + 0.1) * slot;
-        let right = (position(index) + 0.9) * slot;
+        let left = (position(index) + BAR_GAP) * slot;
+        let right = (position(index) + 1.0 - BAR_GAP) * slot;
         let top = scale.position(*value) * HEIGHT;
         path.push_str(&format!(
             "M {left:.1} {HEIGHT} L {left:.1} {top:.1} L {right:.1} {top:.1} L {right:.1} {HEIGHT} Z "

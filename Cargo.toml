@@ -6,6 +6,9 @@ description = "Mountain weather for the places you go: finds them, keeps them an
 license.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 clap = { version = "4.6.9", features = ["derive"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -23,6 +26,33 @@ version = "0.4.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/alrubearb-sys/peakcast"
+
+# Pedantic as in ruff and uv, without the lints they also find too noisy.
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Names such as `forecast::ForecastError` read well where they are used.
+module_name_repetitions = "allow"
+# An app, not a library: no caller ignores a result by mistake.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Splitting is decided by what reads well, not by a line count.
+too_many_lines = "allow"
+similar_names = "allow"
+# Arms kept apart read as separate cases, even when they do the same today.
+match_same_arms = "allow"
+# `assert!(x.is_empty())` says what is checked better than comparing to `[]`.
+assert_is_empty = "allow"
+# A short closure reads better than the full path of the method.
+redundant_closure_for_method_calls = "allow"
+# Unix times and coordinates read as they come in the data.
+unreadable_literal = "allow"
+# `write!` into a String asks to handle an error that cannot happen; the chart
+# paths have a few dozen points, so the extra allocation does not matter.
+format_push_string = "allow"
+dbg_macro = "warn"
+todo = "warn"
+redundant_clone = "warn"
 
 [profile.release]
 lto = true

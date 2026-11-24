@@ -25,7 +25,7 @@ const MAX_AGE_SECONDS: i64 = 3600;
 // A click on the icon takes the focus away first, so the panel is already closed by then.
 const SAME_CLICK: Duration = Duration::from_millis(300);
 // As often as Omarchy looks for its own updates, and only when the panel opens.
-const CHECK_EVERY: Duration = Duration::from_secs(6 * 3600);
+const CHECK_EVERY: Duration = Duration::from_hours(6);
 
 thread_local! {
     static APP: RefCell<Option<Rc<App>>> = const { RefCell::new(None) };
@@ -186,6 +186,10 @@ impl App {
         connect(&panel);
         panel.show()?;
         if let Some((x, y)) = position {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "screen points fit in an f32"
+            )]
             let position = LogicalPosition::new(x as f32, y as f32);
             panel.window().set_position(position);
         }
@@ -436,6 +440,10 @@ impl App {
         );
     }
 
+    #[expect(
+        clippy::unused_self,
+        reason = "an action of the app like the others; the background task hands the app back"
+    )]
     fn reload_areas(&self, wanted: Option<String>) {
         in_background(engine::areas, move |app, result| match result {
             Ok(saved) => {
@@ -518,16 +526,13 @@ impl App {
 
         let loading = self.loading.borrow().as_ref() == Some(&area);
         let reports = self.reports.borrow();
-        let updated = match reports.get(&area) {
-            Some(saved) => {
-                fill(panel, view::build(&saved.panel));
-                let offset = saved.panel.utc_offset_seconds;
-                format!("Updated {}", clock::clock(saved.at, offset))
-            }
-            None => {
-                clear(panel);
-                String::new()
-            }
+        let updated = if let Some(saved) = reports.get(&area) {
+            fill(panel, view::build(&saved.panel));
+            let offset = saved.panel.utc_offset_seconds;
+            format!("Updated {}", clock::clock(saved.at, offset))
+        } else {
+            clear(panel);
+            String::new()
         };
         let updated = if loading { "Updating" } else { &updated };
         panel.set_updated(updated.into());

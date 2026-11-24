@@ -179,7 +179,7 @@ mod tests {
             gusts: KilometersPerHour(71.6),
             high_wind: Some(KilometersPerHour(76.0)),
             visibility: Meters(3640.0),
-            sunshine: Duration::from_secs(3420),
+            sunshine: Duration::from_mins(57),
             freezing_level: Meters(2770.0),
             snow_line: None,
             precipitation_probability: Some(Percent(93)),

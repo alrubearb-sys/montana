@@ -6,6 +6,9 @@ description = "Map to place the summit and the base of a peakcast area."
 license.workspace = true
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
 eframe = "0.37"
 serde = { version = "1", features = ["derive"] }

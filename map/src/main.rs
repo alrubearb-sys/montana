@@ -286,7 +286,7 @@ impl MapApp {
             .center_at(position((place.latitude, place.longitude)));
         let _ = self.memory.set_zoom(PLACE_ZOOM);
         if matches!(self.task, Task::Create) {
-            self.name = place.name.clone();
+            self.name.clone_from(&place.name);
             self.kind = Some(place.kind.clone());
         }
         self.places.clear();
@@ -513,16 +513,24 @@ fn mark(painter: &egui::Painter, at: Pos2, label: &str, color: Color32) {
     painter.galley(corner, text, color);
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamped to 0..=255 first"
+)]
+fn channel(value: f32) -> u8 {
+    value.round().clamp(0.0, 255.0) as u8
+}
+
 fn translucent(color: Color32, alpha: f32) -> Color32 {
-    let alpha = (alpha * 255.0).round().clamp(0.0, 255.0) as u8;
+    let alpha = channel(alpha * 255.0);
     Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
 }
 
 // The foreground over the background at Omarchy's fill strengths.
 fn mix(alpha: f32) -> Color32 {
     let blend = |back: u8, front: u8| {
-        let value = f32::from(back) + (f32::from(front) - f32::from(back)) * alpha;
-        value.round().clamp(0.0, 255.0) as u8
+        channel(f32::from(back) + (f32::from(front) - f32::from(back)) * alpha)
     };
     Color32::from_rgb(
         blend(BACKGROUND.r(), FOREGROUND.r()),
