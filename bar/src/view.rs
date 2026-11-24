@@ -123,30 +123,11 @@ pub fn choices(areas: &[String], matches: &[usize], found: &[Place]) -> Vec<Choi
     });
     let found = found.iter().map(|place| Choice {
         title: place.name.as_str().into(),
-        detail: place_detail(place).into(),
+        detail: place.detail.as_str().into(),
         editable: false,
         removable: false,
     });
     saved.chain(found).collect()
-}
-
-// "peak · 2502 m · Schwende-Rüte, Switzerland": what it is tells apart places with
-// the same name. The description starts with the name, which the row already shows.
-fn place_detail(place: &Place) -> String {
-    let kind = place.kind.replace('_', " ");
-    let region = place
-        .description
-        .split_once(", ")
-        .map_or(place.description.as_str(), |(_, rest)| rest);
-    match place.elevation {
-        Some(elevation) => format!("{kind} · {} m · {region}", whole(elevation)),
-        None => format!("{kind} · {region}"),
-    }
-}
-
-// Avoids "-0".
-fn whole(value: f64) -> String {
-    format!("{:.0}", value.round() + 0.0)
 }
 
 #[cfg(test)]
@@ -165,25 +146,6 @@ mod tests {
         assert_eq!(matching(&areas, "säN"), [1]);
         assert_eq!(matching(&areas, " res"), [0, 2]);
         assert!(matching(&areas, "aneto").is_empty());
-    }
-
-    #[test]
-    fn found_places_show_elevation_and_region() {
-        let place = |elevation| Place {
-            name: String::from("Säntis"),
-            kind: String::from("peak"),
-            description: String::from("Säntis, Schwende-Rüte, Switzerland"),
-            elevation,
-        };
-
-        assert_eq!(
-            place_detail(&place(Some(2502.0))),
-            "peak · 2502 m · Schwende-Rüte, Switzerland"
-        );
-        assert_eq!(
-            place_detail(&place(None)),
-            "peak · Schwende-Rüte, Switzerland"
-        );
     }
 
     #[test]

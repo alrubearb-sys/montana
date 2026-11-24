@@ -1,0 +1,92 @@
+import { Omarchy, Theme, Label } from "theme.slint";
+
+export struct Tick { position: float, text: string }
+export struct Mark { position: float, text: string, midnight: bool }
+export enum Tone { line, snow, ice }
+export struct Legend { text: string, tone: Tone }
+// zero: where 0 °C is, from the top, or -1 when the chart has no such line.
+export struct Chart { legend: [Legend], line: string, snow: string, rain: string, ice: string, ticks: [Tick], zero: float }
+
+export component Plot inherits Rectangle {
+    in property <Chart> chart;
+    in property <[Mark]> marks;
+    in property <color> tint;
+    in property <int> hovered;
+    in property <int> hours;
+    in property <length> axis: 38px;
+    height: 94px;
+
+    HorizontalLayout {
+        x: 0; y: 0; height: 14px; spacing: 10px;
+        for part in chart.legend: Label { text: part.text; color: part.tone == Tone.snow ? Theme.snow : part.tone == Tone.ice ? Theme.error : root.tint; }
+        Rectangle { }
+    }
+
+    for tick in chart.ticks: Label {
+        x: 0;
+        y: plot.y + plot.height * tick.position - self.height / 2;
+        width: root.axis - 6px;
+        horizontal-alignment: right;
+        text: tick.text;
+        color: chart.zero >= 0 && tick.text == "0" ? Theme.text : Theme.dim;
+    }
+
+    plot := Rectangle {
+        x: root.axis;
+        y: 20px;
+        width: parent.width - root.axis;
+        height: parent.height - 26px;
+        background: Theme.chart;
+
+        for tick in chart.ticks: Rectangle {
+            y: plot.height * tick.position;
+            width: 100%;
+            height: 1px;
+            background: Theme.grid;
+        }
+        // Freezing, a thin red line so the side of 0 °C shows at a glance, as in Omarchy.
+        if chart.zero >= 0: Rectangle {
+            y: plot.height * chart.zero;
+            width: 100%;
+            height: 1px;
+            background: Theme.error.with-alpha(0.4);
+        }
+        for mark in marks: Rectangle {
+            x: plot.width * mark.position;
+            width: 1px;
+            height: 100%;
+            background: mark.midnight ? Theme.dim : Theme.grid;
+        }
+        if chart.rain != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.rain;
+            fill: Theme.rain;
+        }
+        if chart.snow != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.snow;
+            fill: Theme.snow;
+        }
+        if chart.ice != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.ice;
+            fill: Theme.error;
+        }
+        if chart.line != "": Path {
+            width: 100%; height: 100%;
+            viewbox-width: 370; viewbox-height: 68;
+            commands: chart.line;
+            stroke: root.tint;
+            stroke-width: 2px;
+        }
+        if root.hovered >= 0: Rectangle {
+            x: plot.width * (root.hovered + 0.5) / root.hours;
+            width: 1px;
+            height: 100%;
+            background: Theme.text;
+        }
+    }
+}

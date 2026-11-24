@@ -39,13 +39,12 @@ struct App {
     // The same areas with their points, for the map.
     saved_areas: RefCell<Vec<SavedArea>>,
     selected: Cell<usize>,
-    // The area picker: saved areas that match what was typed, then places found.
-    typed: RefCell<String>,
-    matches: RefCell<Vec<usize>>,
-    found: RefCell<Vec<Place>>,
-    searched: RefCell<String>,
-    searching: Cell<bool>,
+    picker: Picker,
     reports: RefCell<HashMap<String, Saved>>,
+    // The area the panel holds and the time of its forecast, if any: setting it
+    // again redraws the whole panel, so it is set only when it changes. None for a
+    // new window, which holds nothing yet.
+    shown: RefCell<Option<(String, Option<i64>)>>,
     loading: RefCell<Option<String>>,
     problem: RefCell<String>,
     closed_at: Cell<Option<Instant>>,
@@ -53,6 +52,16 @@ struct App {
     // A newer release, from `peakcast outdated`; empty when this one is the newest.
     new_version: RefCell<String>,
     checked_at: Cell<Option<Instant>>,
+}
+
+// The area picker: saved areas that match what was typed, then places found.
+#[derive(Default)]
+struct Picker {
+    typed: RefCell<String>,
+    matches: RefCell<Vec<usize>>,
+    found: RefCell<Vec<Place>>,
+    searched: RefCell<String>,
+    searching: Cell<bool>,
 }
 
 struct Saved {
@@ -82,12 +91,9 @@ fn run() -> Result<(), PlatformError> {
         areas: RefCell::default(),
         saved_areas: RefCell::default(),
         selected: Cell::new(0),
-        typed: RefCell::default(),
-        matches: RefCell::default(),
-        found: RefCell::default(),
-        searched: RefCell::default(),
-        searching: Cell::new(false),
+        picker: Picker::default(),
         reports: RefCell::default(),
+        shown: RefCell::default(),
         loading: RefCell::default(),
         problem: RefCell::default(),
         closed_at: Cell::new(None),
@@ -194,6 +200,7 @@ impl App {
             panel.window().set_position(position);
         }
         self.panel.replace(Some(panel));
+        self.shown.take();
         // The window exists for macOS only after the event loop has turned.
         Timer::single_shot(Duration::ZERO, || with_app(App::focus));
         self.show_selected();
@@ -280,29 +287,30 @@ impl App {
     }
 
     fn filter(&self, typed: &str) {
-        self.typed.replace(typed.to_string());
-        self.matches
+        self.picker.typed.replace(typed.to_string());
+        self.picker
+            .matches
             .replace(view::matching(&self.areas.borrow(), typed));
-        self.found.borrow_mut().clear();
-        self.searched.borrow_mut().clear();
+        self.picker.found.borrow_mut().clear();
+        self.picker.searched.borrow_mut().clear();
         self.show_choices();
     }
 
     fn search(&self, text: &str) {
-        if self.searching.get() {
+        if self.picker.searching.get() {
             return;
         }
-        self.searching.set(true);
-        self.searched.replace(text.to_string());
+        self.picker.searching.set(true);
+        self.picker.searched.replace(text.to_string());
         self.show_choices();
         let typed = text.to_string();
         in_background(
             move || engine::search(&typed),
             |app, result| {
-                app.searching.set(false);
+                app.picker.searching.set(false);
                 match result {
                     Ok(places) => {
-                        app.found.replace(places);
+                        app.picker.found.replace(places);
                         app.problem.take();
                         app.show_selected();
                     }
@@ -313,13 +321,13 @@ impl App {
     }
 
     fn choose(&self, index: usize) {
-        let saved = self.matches.borrow().get(index).copied();
+        let saved = self.picker.matches.borrow().get(index).copied();
         if let Some(area) = saved {
             self.select(area);
             return;
         }
-        let number = index - self.matches.borrow().len();
-        let Some(place) = self.found.borrow().get(number).cloned() else {
+        let number = index - self.picker.matches.borrow().len();
+        let Some(place) = self.picker.found.borrow().get(number).cloned() else {
             return;
         };
         let known = self
@@ -331,7 +339,7 @@ impl App {
             self.select(area);
             return;
         }
-        let text = self.searched.borrow().clone();
+        let text = self.picker.searched.borrow().clone();
         in_background(
             move || engine::add(&text, number + 1),
             move |app, result| match result {
@@ -343,6 +351,7 @@ impl App {
 
     fn remove(&self, index: usize) {
         let Some(area) = self
+            .picker
             .matches
             .borrow()
             .get(index)
@@ -385,6 +394,7 @@ impl App {
 
     fn edit(&self, index: usize) {
         let area = self
+            .picker
             .matches
             .borrow()
             .get(index)
@@ -453,8 +463,9 @@ impl App {
                 let index = areas
                     .iter()
                     .position(|area| Some(area) == previous.as_ref());
-                app.matches
-                    .replace(view::matching(&areas, &app.typed.borrow()));
+                app.picker
+                    .matches
+                    .replace(view::matching(&areas, &app.picker.typed.borrow()));
                 app.areas.replace(areas);
                 app.selected.set(index.unwrap_or(0));
                 app.show_selected();
@@ -526,14 +537,19 @@ impl App {
 
         let loading = self.loading.borrow().as_ref() == Some(&area);
         let reports = self.reports.borrow();
-        let updated = if let Some(saved) = reports.get(&area) {
-            fill(panel, view::build(&saved.panel));
+        let saved = reports.get(&area);
+        let wanted = Some((area.clone(), saved.map(|saved| saved.at)));
+        if *self.shown.borrow() != wanted {
+            match saved {
+                Some(saved) => fill(panel, view::build(&saved.panel)),
+                None => clear(panel),
+            }
+            self.shown.replace(wanted);
+        }
+        let updated = saved.map_or(String::new(), |saved| {
             let offset = saved.panel.utc_offset_seconds;
             format!("Updated {}", clock::clock(saved.at, offset))
-        } else {
-            clear(panel);
-            String::new()
-        };
+        });
         let updated = if loading { "Updating" } else { &updated };
         panel.set_updated(updated.into());
         self.show_choices();
@@ -545,8 +561,8 @@ impl App {
             return;
         };
         let areas = self.areas.borrow();
-        let matches = self.matches.borrow();
-        let choices = view::choices(&areas, &matches, &self.found.borrow());
+        let matches = self.picker.matches.borrow();
+        let choices = view::choices(&areas, &matches, &self.picker.found.borrow());
         panel.set_choices(view::model(choices));
         let selected = matches
             .iter()
@@ -554,10 +570,10 @@ impl App {
             .and_then(|index| i32::try_from(index).ok())
             .unwrap_or(-1);
         panel.set_selected(selected);
-        panel.set_searching(self.searching.get());
+        panel.set_searching(self.picker.searching.get());
         // Saved areas are dragged only while nothing is typed: a filtered list does
         // not show their real order.
-        let movable = if self.typed.borrow().trim().is_empty() && matches.len() > 1 {
+        let movable = if self.picker.typed.borrow().trim().is_empty() && matches.len() > 1 {
             matches.len()
         } else {
             0

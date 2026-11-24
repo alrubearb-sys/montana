@@ -1,0 +1,141 @@
+// Omarchy's palette roles (themes/tokyo-night/colors.toml), so a later version can read
+// the active Omarchy theme instead of these values.
+export global Omarchy {
+    out property <color> accent: #7aa2f7;
+    out property <color> muted: #414868;
+    out property <color> background: #1a1b26;
+    out property <color> dark-background: #13141c;
+    out property <color> foreground: #a9b1d6;
+    out property <color> dark-foreground: #565f89;
+    out property <color> bright-foreground: #c0caf5;
+    out property <color> red: #f7768e;
+    out property <color> yellow: #e0af68;
+    out property <color> green: #9ece6a;
+    out property <color> blue: #7aa2f7;
+    out property <color> bright-cyan: #0db9d7;
+}
+
+// Omarchy's type scale and spacing at the default base size of 12 (shell/Commons/Style.qml).
+export global Style {
+    out property <length> caption: 10px;
+    out property <length> body-small: 11px;
+    out property <length> body: 12px;
+    out property <length> title: 14px;
+    out property <length> heading: 16px;
+    out property <length> panel-padding: 18px;
+    out property <length> row-gap: 8px;
+    out property <length> label-gap: 4px;
+    out property <length> control-padding-x: 10px;
+    out property <length> control-padding-y: 6px;
+    out property <length> control-gap: 8px;
+    out property <length> control-height: 28px;
+    out property <length> popup-row-height: 28px;
+    out property <length> row-padding-x: 12px;
+}
+
+export global Theme {
+    out property <color> background: Omarchy.background;
+    out property <color> chart: Omarchy.dark-background;
+    out property <color> border: Omarchy.accent;
+    out property <color> grid: Omarchy.muted;
+    out property <color> dim: Omarchy.dark-foreground;
+    out property <color> text: Omarchy.foreground;
+    out property <color> temperature: Omarchy.bright-cyan;
+    out property <color> wind: Omarchy.green;
+    out property <color> snow: Omarchy.bright-foreground;
+    out property <color> rain: Omarchy.blue;
+    out property <color> sun: Omarchy.yellow;
+    out property <color> error: Omarchy.red;
+}
+
+export component Label inherits Text {
+    color: Theme.dim;
+    font-size: Style.body-small;
+}
+
+export component Value inherits Text {
+    color: Theme.text;
+    font-size: Style.title;
+}
+
+export component Separator inherits Rectangle {
+    height: 1px;
+    background: Theme.grid;
+}
+
+// Omarchy's [controls] chrome: a 1 px foreground border at 40 %, a faint fill, and
+// stronger fills on hover and press. Corners stay square, as in Omarchy's default.
+export component Button inherits Rectangle {
+    in property <string> text;
+    callback clicked;
+    background: Theme.text.with-alpha(touch.pressed ? 0.22 : touch.has-hover ? 0.08 : 0.04);
+    border-width: 1px;
+    border-color: Theme.text.with-alpha(touch.has-hover ? 0.25 : 0.4);
+    HorizontalLayout {
+        padding-left: Style.control-padding-x;
+        padding-right: Style.control-padding-x;
+        padding-top: Style.control-padding-y;
+        padding-bottom: Style.control-padding-y;
+        Text { text: root.text; color: Theme.text; font-size: Style.body; vertical-alignment: center; horizontal-alignment: center; }
+    }
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A square control with a folded map drawn on it: the panel font has no icons.
+export component MapButton inherits Rectangle {
+    callback clicked;
+    width: Style.control-height;
+    height: Style.control-height;
+    background: Theme.text.with-alpha(touch.pressed ? 0.22 : touch.has-hover ? 0.08 : 0.04);
+    border-width: 1px;
+    border-color: Theme.text.with-alpha(touch.has-hover ? 0.25 : 0.4);
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 16px;
+        height: 14px;
+        viewbox-width: 16;
+        viewbox-height: 14;
+        commands: "M 1 2 L 5.5 1 L 10.5 2 L 15 1 L 15 12 L 10.5 13 L 5.5 12 L 1 13 Z M 5.5 1 L 5.5 12 M 10.5 2 L 10.5 13";
+        stroke: Theme.text;
+        stroke-width: 1.25px;
+    }
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Omarchy's dropdown trigger: control chrome, the current choice and a chevron.
+export component Picker inherits Rectangle {
+    in property <string> text;
+    in property <bool> open;
+    callback clicked;
+    height: Style.control-height;
+    background: Theme.text.with-alpha(touch.pressed ? 0.22 : touch.has-hover || root.open ? 0.08 : 0.04);
+    border-width: 1px;
+    border-color: Theme.text.with-alpha(touch.has-hover || root.open ? 0.25 : 0.4);
+    HorizontalLayout {
+        padding-left: Style.control-padding-x;
+        padding-right: Style.control-gap;
+        spacing: Style.control-gap;
+        Text { text: root.text; color: Theme.border; font-size: Style.heading; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+        Path {
+            width: 10px;
+            height: 6px;
+            y: (parent.height - self.height) / 2;
+            viewbox-width: 10;
+            viewbox-height: 6;
+            commands: "M 1 1 L 5 5 L 9 1";
+            stroke: Theme.text;
+            stroke-width: 1.5px;
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
