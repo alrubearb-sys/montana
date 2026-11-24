@@ -313,17 +313,19 @@ fn day_sky(hours: &[HourlyForecast], light: Option<&Daylight>) -> &'static str {
     let total = |kind: Fall| amounts(hours.iter().copied(), kind).iter().sum::<f64>();
     let (snow, ice, rain) = (total(Fall::Snow), total(Fall::Freezing), total(Fall::Rain));
     let wet = snow + ice + rain;
-    let other = if ice > rain { "ice" } else { "rain" };
+    let (other, mixed) = if ice > rain {
+        ("ice", "snow, ice")
+    } else {
+        ("rain", "snow, rain")
+    };
     if wet < WET_DAY_MM {
         dry_sky(&hours).map_or("cloudy", sky_name)
     } else if snow >= wet * 2.0 / 3.0 {
         "snow"
     } else if snow <= wet / 3.0 {
         other
-    } else if other == "ice" {
-        "snow, ice"
     } else {
-        "snow, rain"
+        mixed
     }
 }
 

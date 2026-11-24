@@ -27,6 +27,24 @@ pub struct Place {
     pub elevation: Option<Meters>,
 }
 
+impl Place {
+    /// "peak · 2502 m · Schwende-Rüte, Switzerland": what it is tells apart places
+    /// with the same name. The description starts with the name, which the panels
+    /// already show.
+    pub fn detail(&self) -> String {
+        let kind = self.kind.replace('_', " ");
+        let region = self
+            .description
+            .split_once(", ")
+            .map_or(self.description.as_str(), |(_, rest)| rest);
+        match self.elevation {
+            // Rounded as the panel rounds its numbers, which also avoids "-0".
+            Some(elevation) => format!("{kind} · {:.0} m · {region}", elevation.0.round() + 0.0),
+            None => format!("{kind} · {region}"),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct NominatimPlace {
     lat: String,
@@ -34,7 +52,7 @@ struct NominatimPlace {
     name: String,
     // The OpenStreetMap value, such as "peak" or "winter_sports".
     #[serde(rename = "type")]
-    kind: String,
+    osm_type: String,
     #[serde(default)]
     importance: f64,
     // What the place is ("city", "peak", "postcode"), clearer than `type`.
@@ -84,7 +102,7 @@ fn parse(json: &str) -> Result<Vec<Place>, Error> {
 
 fn score(place: &NominatimPlace) -> f64 {
     let mountain = matches!(
-        place.kind.as_str(),
+        place.osm_type.as_str(),
         "peak"
             | "volcano"
             | "ridge"
@@ -115,7 +133,7 @@ fn to_place(place: NominatimPlace) -> Result<Place, Error> {
             &place.address,
         ),
         kind: if place.addresstype.is_empty() {
-            place.kind
+            place.osm_type
         } else {
             place.addresstype
         },
@@ -175,6 +193,26 @@ fn parse_elevation(text: &str) -> Option<Meters> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detail_says_what_and_where_without_the_name() {
+        let mut place = Place {
+            name: String::from("Hochälpele"),
+            kind: String::from("winter_sports"),
+            description: String::from("Hochälpele, Schwende-Rüte, Switzerland"),
+            country_code: String::from("ch"),
+            latitude: 47.3,
+            longitude: 9.4,
+            elevation: Some(Meters(1463.6)),
+        };
+        assert_eq!(
+            place.detail(),
+            "winter sports · 1464 m · Schwende-Rüte, Switzerland"
+        );
+
+        place.elevation = None;
+        assert_eq!(place.detail(), "winter sports · Schwende-Rüte, Switzerland");
+    }
 
     #[test]
     fn reads_peak_with_elevation() {
@@ -243,11 +281,11 @@ mod tests {
 
     #[test]
     fn mountains_win_near_ties() {
-        let place = |kind: &str, importance| NominatimPlace {
+        let place = |osm_type: &str, importance| NominatimPlace {
             lat: String::new(),
             lon: String::new(),
             name: String::new(),
-            kind: kind.to_string(),
+            osm_type: osm_type.to_string(),
             importance,
             addresstype: String::new(),
             place_rank: 18,

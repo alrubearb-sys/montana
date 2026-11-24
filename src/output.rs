@@ -13,8 +13,23 @@ pub const SEARCH_CREDIT: &str = "Search data © OpenStreetMap contributors (ODbL
 
 #[derive(Serialize)]
 pub struct SearchResults {
-    pub places: Vec<Place>,
+    pub places: Vec<FoundPlace>,
     pub credits: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct FoundPlace {
+    #[serde(flatten)]
+    pub place: Place,
+    // Written here so that the three panels show it the same way.
+    pub detail: String,
+}
+
+impl From<Place> for FoundPlace {
+    fn from(place: Place) -> Self {
+        let detail = place.detail();
+        Self { place, detail }
+    }
 }
 
 #[derive(Serialize)]
@@ -132,15 +147,15 @@ mod tests {
     #[test]
     fn search_json_lists_places_with_credits() {
         let results = SearchResults {
-            places: vec![Place {
+            places: vec![FoundPlace::from(Place {
                 name: String::from("Aneto"),
                 kind: String::from("peak"),
                 description: String::from("Aneto, Benasque, Spain"),
                 country_code: String::from("es"),
                 latitude: 42.6311,
                 longitude: 0.6567,
-                elevation: None,
-            }],
+                elevation: Some(Meters(3404.4)),
+            })],
             credits: SEARCH_CREDIT,
         };
 
@@ -154,7 +169,8 @@ mod tests {
                 "country_code": "es",
                 "latitude": 42.6311,
                 "longitude": 0.6567,
-                "elevation": null
+                "elevation": 3404.4,
+                "detail": "peak · 3404 m · Benasque, Spain"
             }],
             "credits": "Search data © OpenStreetMap contributors (ODbL)"
         });

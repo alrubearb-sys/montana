@@ -16,7 +16,7 @@ use clap::{Parser, Subcommand};
 use crate::data::{forecast, release};
 use crate::error::Error;
 use crate::model::{Area, UnixTime};
-use crate::output::{Report, SearchResults};
+use crate::output::{FoundPlace, Report, SearchResults};
 
 /// Should I go to the mountains?
 #[derive(Parser)]
@@ -154,7 +154,7 @@ fn search(out: &mut impl Write, text: &str, json: bool) -> Result<(), Error> {
     if json {
         // No results is an answer for the panel, not an error.
         let results = SearchResults {
-            places,
+            places: places.into_iter().map(FoundPlace::from).collect(),
             credits: output::SEARCH_CREDIT,
         };
         writeln!(out, "{}", output::to_json(&results)?)?;

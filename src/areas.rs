@@ -31,11 +31,7 @@ pub fn remove(name: &str) -> Result<Area, Error> {
 
 // The last area stays, as the last city of Omarchy's world clock does.
 fn without(mut areas: Vec<Area>, name: &str) -> Result<(Vec<Area>, Area), Error> {
-    let wanted = name.to_lowercase();
-    let index = areas
-        .iter()
-        .position(|area| area.name.to_lowercase() == wanted)
-        .ok_or_else(|| Error::UnknownArea(name.to_string()))?;
+    let index = index_of(&areas, name)?;
     if areas.len() == 1 {
         return Err(Error::LastArea(name.to_string()));
     }
@@ -52,11 +48,7 @@ pub fn reorder(name: &str, position: usize) -> Result<usize, Error> {
 
 // A position past the end puts the area last.
 fn moved(mut areas: Vec<Area>, name: &str, position: usize) -> Result<(Vec<Area>, usize), Error> {
-    let wanted = name.to_lowercase();
-    let index = areas
-        .iter()
-        .position(|area| area.name.to_lowercase() == wanted)
-        .ok_or_else(|| Error::UnknownArea(name.to_string()))?;
+    let index = index_of(&areas, name)?;
     let area = areas.remove(index);
     let at = position.clamp(1, areas.len() + 1) - 1;
     areas.insert(at, area);
@@ -64,11 +56,8 @@ fn moved(mut areas: Vec<Area>, name: &str, position: usize) -> Result<(Vec<Area>
 }
 
 pub fn find(name: &str) -> Result<Area, Error> {
-    let wanted = name.to_lowercase();
-    let found = all()?
-        .into_iter()
-        .find(|area| area.name.to_lowercase() == wanted);
-    match (found, wanted.as_str()) {
+    let found = all()?.into_iter().find(|area| same_name(&area.name, name));
+    match (found, name.to_lowercase().as_str()) {
         (Some(area), _) => Ok(area),
         (None, "bodele" | "boedele" | "bödele") => Ok(boedele()),
         (None, _) => Err(Error::UnknownArea(name.to_string())),
@@ -111,10 +100,7 @@ pub fn add(text: &str, chosen: usize, name: Option<String>) -> Result<(Area, Sou
     let name = name.unwrap_or_else(|| place.name.clone());
     // all(), not the file: the first area saved must not make Bödele disappear.
     let mut areas = all()?;
-    if areas
-        .iter()
-        .any(|area| area.name.to_lowercase() == name.to_lowercase())
-    {
+    if areas.iter().any(|area| same_name(&area.name, &name)) {
         return Err(Error::AlreadySaved(name));
     }
 
@@ -143,10 +129,7 @@ pub fn create(
 ) -> Result<Area, Error> {
     let name = name.trim();
     let mut areas = all()?;
-    if areas
-        .iter()
-        .any(|area| area.name.to_lowercase() == name.to_lowercase())
-    {
+    if areas.iter().any(|area| same_name(&area.name, name)) {
         return Err(Error::AlreadySaved(name.to_string()));
     }
     let area = Area {
@@ -169,11 +152,7 @@ pub fn move_to(
     base: Option<(f64, f64)>,
 ) -> Result<Area, Error> {
     let mut areas = all()?;
-    let wanted = name.to_lowercase();
-    let index = areas
-        .iter()
-        .position(|area| area.name.to_lowercase() == wanted)
-        .ok_or_else(|| Error::UnknownArea(name.to_string()))?;
+    let index = index_of(&areas, name)?;
     let new_name = new_name
         .map(str::trim)
         .filter(|new_name| !new_name.is_empty());
@@ -196,11 +175,22 @@ pub fn move_to(
 // Another area already has this name; the area being renamed may keep its own,
 // even with other capitals.
 fn taken(areas: &[Area], name: &str, except: usize) -> bool {
-    let name = name.to_lowercase();
     areas
         .iter()
         .enumerate()
-        .any(|(index, area)| index != except && area.name.to_lowercase() == name)
+        .any(|(index, area)| index != except && same_name(&area.name, name))
+}
+
+fn index_of(areas: &[Area], name: &str) -> Result<usize, Error> {
+    areas
+        .iter()
+        .position(|area| same_name(&area.name, name))
+        .ok_or_else(|| Error::UnknownArea(name.to_string()))
+}
+
+// Area names ignore case: "aneto" is the saved "Aneto".
+fn same_name(saved: &str, name: &str) -> bool {
+    saved.to_lowercase() == name.to_lowercase()
 }
 
 fn point_at((latitude, longitude): (f64, f64)) -> Result<Point, Error> {
