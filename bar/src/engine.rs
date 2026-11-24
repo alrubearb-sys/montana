@@ -22,6 +22,9 @@ pub struct Panel {
     pub wind: Chart,
     pub precipitation: Chart,
     pub readings: Vec<String>,
+    // Older engines do not write it.
+    #[serde(default)]
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

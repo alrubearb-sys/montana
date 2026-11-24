@@ -36,6 +36,8 @@ export component Panel inherits Window {
     in property <bool> searching;
     // A newer release, or empty when this one is the newest.
     in property <string> new-version;
+    // Of the engine, so that it shows whether this is the newest release.
+    in property <string> version;
     callback choose(int);
     callback remove(int);
     callback move-area(int, int);
@@ -266,6 +268,12 @@ export component Panel inherits Window {
                     opacity: 0.4;
                     wrap: word-wrap;
                     horizontal-stretch: 1;
+                }
+                if root.version != "": Label {
+                    text: root.new-version != "" ? root.version + " ·" : root.version;
+                    font-size: Style.caption;
+                    opacity: 0.4;
+                    vertical-alignment: bottom;
                 }
                 if root.new-version != "": Label {
                     text: "Update to " + root.new-version;

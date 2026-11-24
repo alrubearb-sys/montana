@@ -618,6 +618,7 @@ fn fill(panel: &Panel, view: view::View) {
     panel.set_wind(view.wind);
     panel.set_precipitation(view.precipitation);
     panel.set_readings(view::model(view.readings));
+    panel.set_version(view.version.into());
 }
 
 fn clear(panel: &Panel) {
@@ -632,6 +633,7 @@ fn clear(panel: &Panel) {
     panel.set_wind(Chart::default());
     panel.set_precipitation(Chart::default());
     panel.set_readings(view::model(Vec::new()));
+    panel.set_version("".into());
 }
 
 fn in_background<T: Send + 'static>(

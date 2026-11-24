@@ -34,6 +34,8 @@ pub struct Panel {
     /// One line per hour of the charts, for the hour under the pointer.
     pub readings: Vec<String>,
     pub credits: &'static str,
+    /// Of the engine: the one `peakcast outdated` compares with the newest release.
+    pub version: &'static str,
 }
 
 /// The summit or the base now.
@@ -140,6 +142,7 @@ pub fn build(report: &Report, now: UnixTime) -> Panel {
         precipitation: precipitation_chart(&hours),
         readings: hours.iter().map(|hour| reading(hour, offset)).collect(),
         credits: report.credits,
+        version: env!("CARGO_PKG_VERSION"),
     }
 }
 
@@ -690,5 +693,6 @@ mod tests {
         assert_eq!(json["precipitation"]["legend"][1]["tone"], "snow");
         assert_eq!(json["chart_width"], 370.0);
         assert_eq!(json["credits"], WEATHER_CREDIT);
+        assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
     }
 }

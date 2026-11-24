@@ -16,6 +16,7 @@ pub struct View {
     pub wind: Chart,
     pub precipitation: Chart,
     pub readings: Vec<SharedString>,
+    pub version: String,
 }
 
 // The engine works the panel out; here it only changes types, so that the Mac
@@ -37,6 +38,7 @@ pub fn build(panel: &engine::Panel) -> View {
             .iter()
             .map(|reading| reading.as_str().into())
             .collect(),
+        version: panel.version.clone(),
     }
 }
 
