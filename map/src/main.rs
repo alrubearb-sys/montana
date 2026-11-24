@@ -179,8 +179,11 @@ impl MapApp {
                     self.saved.replace(Some(self.name.trim().to_string()));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
-                Message::Found(Err(error)) | Message::Saved(Err(error)) => {
+                Message::Found(Err(error)) => {
                     self.search = Search::Idle;
+                    self.problem = error.to_string();
+                }
+                Message::Saved(Err(error)) => {
                     self.saving = false;
                     self.problem = error.to_string();
                 }

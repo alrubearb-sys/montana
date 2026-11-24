@@ -41,10 +41,9 @@ struct App {
     selected: Cell<usize>,
     picker: Picker,
     reports: RefCell<HashMap<String, Saved>>,
-    // The area the panel holds and the time of its forecast, if any: setting it
-    // again redraws the whole panel, so it is set only when it changes. None for a
-    // new window, which holds nothing yet.
-    shown: RefCell<Option<(String, Option<i64>)>>,
+    shown: RefCell<Shown>,
+    // Counts the forecasts kept, so that each one can be told from the one before.
+    stored: Cell<u64>,
     loading: RefCell<Option<String>>,
     problem: RefCell<String>,
     closed_at: Cell<Option<Instant>>,
@@ -67,6 +66,16 @@ struct Picker {
 struct Saved {
     panel: engine::Panel,
     at: i64,
+    revision: u64,
+}
+
+// What the window holds: setting a model again redraws the whole panel, even with
+// the same content, so each is set only when it changes. A new window holds none.
+#[derive(Default)]
+struct Shown {
+    // The area and the revision of its forecast, if there is one.
+    forecast: Option<(String, Option<u64>)>,
+    choices: Option<Vec<Choice>>,
 }
 
 fn main() -> ExitCode {
@@ -94,6 +103,7 @@ fn run() -> Result<(), PlatformError> {
         picker: Picker::default(),
         reports: RefCell::default(),
         shown: RefCell::default(),
+        stored: Cell::new(0),
         loading: RefCell::default(),
         problem: RefCell::default(),
         closed_at: Cell::new(None),
@@ -509,7 +519,12 @@ impl App {
         }
         match result {
             Ok(panel) => {
-                let saved = Saved { panel, at: now() };
+                self.stored.set(self.stored.get() + 1);
+                let saved = Saved {
+                    panel,
+                    at: now(),
+                    revision: self.stored.get(),
+                };
                 self.reports.borrow_mut().insert(area.to_string(), saved);
                 self.problem.take();
                 self.show_selected();
@@ -538,13 +553,13 @@ impl App {
         let loading = self.loading.borrow().as_ref() == Some(&area);
         let reports = self.reports.borrow();
         let saved = reports.get(&area);
-        let wanted = Some((area.clone(), saved.map(|saved| saved.at)));
-        if *self.shown.borrow() != wanted {
+        let wanted = Some((area.clone(), saved.map(|saved| saved.revision)));
+        if self.shown.borrow().forecast != wanted {
             match saved {
                 Some(saved) => fill(panel, view::build(&saved.panel)),
                 None => clear(panel),
             }
-            self.shown.replace(wanted);
+            self.shown.borrow_mut().forecast = wanted;
         }
         let updated = saved.map_or(String::new(), |saved| {
             let offset = saved.panel.utc_offset_seconds;
@@ -563,7 +578,10 @@ impl App {
         let areas = self.areas.borrow();
         let matches = self.picker.matches.borrow();
         let choices = view::choices(&areas, &matches, &self.picker.found.borrow());
-        panel.set_choices(view::model(choices));
+        if self.shown.borrow().choices.as_ref() != Some(&choices) {
+            panel.set_choices(view::model(choices.clone()));
+            self.shown.borrow_mut().choices = Some(choices);
+        }
         let selected = matches
             .iter()
             .position(|&area| area == self.selected.get())
