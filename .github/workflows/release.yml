@@ -20,7 +20,7 @@ jobs:
             arch: aarch64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup update stable --no-self-update && rustup default stable
       - run: cargo build --release -p peakcast -p peakcast-map
       - name: Package
@@ -29,7 +29,7 @@ jobs:
           mkdir "$name"
           cp target/release/peakcast target/release/peakcast-map LICENSE-MIT LICENSE-APACHE README.md "$name/"
           tar czf "$name.tar.gz" "$name"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}
           path: "*.tar.gz"
@@ -37,12 +37,12 @@ jobs:
   macos:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup update stable --no-self-update && rustup default stable
       - run: bash bar/bundle.sh --no-install
       - name: Package
         run: ditto -c -k --keepParent target/Peakcast.app "Peakcast-${GITHUB_REF_NAME#v}-macos-arm64.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: "*.zip"
@@ -51,7 +51,7 @@ jobs:
     needs: [linux, macos]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -75,7 +75,7 @@ jobs:
       - if: env.TAP_TOKEN == ''
         run: echo "::warning::TAP_TOKEN is not set, so the Homebrew cask was not updated"
       - if: env.TAP_TOKEN != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - if: env.TAP_TOKEN != ''
         name: Update the cask
         run: |
