@@ -10,10 +10,9 @@ use serde::Deserialize;
 pub struct Place {
     pub name: String,
     pub kind: String,
-    pub description: String,
     pub latitude: f64,
     pub longitude: f64,
-    pub elevation: Option<f64>,
+    pub detail: String,
 }
 
 #[derive(Deserialize)]

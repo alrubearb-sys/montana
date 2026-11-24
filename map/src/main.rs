@@ -1,4 +1,6 @@
+mod args;
 mod engine;
+mod look;
 
 use std::cell::RefCell;
 use std::env;
@@ -9,59 +11,36 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontData, FontFamily, FontId, Key, Pos2, Rect, Sense,
-    Stroke, TextEdit, vec2,
+    self, Align2, Color32, CornerRadius, FontId, Key, Pos2, Rect, Sense, Stroke, TextEdit, vec2,
 };
-use eframe::epaint::text::{FontInsert, FontPriority, InsertFontFamily};
 use walkers::sources::{OpenTopoMap, OpenTopoServer};
 use walkers::{HeaderValue, HttpOptions, HttpTiles, Map, MapMemory, Position, lon_lat};
 
+use crate::args::{Args, USAGE, parse_args};
 use crate::engine::Place;
+use crate::look::{
+    BACKGROUND, BLUE, BODY, CAPTION, CREDIT, DIM, FOREGROUND, GAP, RED, ROW_HEIGHT, ROW_PADDING,
+    SEE_THROUGH, mix, omarchy_look, popup_frame, translucent,
+};
 
 // The panel tells a saved map from a closed one by the exit code, and reads the
 // name of the new area from the output.
 const CANCELLED: u8 = 2;
 const START_ZOOM: f64 = 14.0;
 const PLACE_ZOOM: f64 = 14.0;
-const USAGE: &str = "usage: peakcast-map <latitude,longitude of where to start>
-       peakcast-map --edit <area> <summit latitude,longitude> [<base latitude,longitude>]";
-
-// Omarchy's Tokyo Night roles, as in the panel.
-const BACKGROUND: Color32 = Color32::from_rgb(0x1a, 0x1b, 0x26);
-const FOREGROUND: Color32 = Color32::from_rgb(0xa9, 0xb1, 0xd6);
-const DIM: Color32 = Color32::from_rgb(0x56, 0x5f, 0x89);
-const ACCENT: Color32 = Color32::from_rgb(0x7a, 0xa2, 0xf7);
-const RED: Color32 = Color32::from_rgb(0xf7, 0x76, 0x8e);
-const BLUE: Color32 = Color32::from_rgb(0x7a, 0xa2, 0xf7);
-
-// Omarchy's type scale and spacing at its default base size of 12.
-const CAPTION: f32 = 10.0;
-// The map's credit must be there, but should hardly be seen.
-const CREDIT: f32 = 9.0;
-// Opacity of everything drawn over the map: the map is guessed through it, and the
-// text stays easy to read.
-const SEE_THROUGH: f32 = 0.88;
-const BODY: f32 = 12.0;
-const ROW_HEIGHT: f32 = 28.0;
-const ROW_PADDING: f32 = 12.0;
-const GAP: f32 = 8.0;
-
-enum Args {
-    Create {
-        center: (f64, f64),
-    },
-    Edit {
-        area: String,
-        summit: (f64, f64),
-        base: Option<(f64, f64)>,
-    },
-}
 
 // What Save does: a new area, or new points and name for the saved area named here.
 #[derive(Clone)]
 enum Task {
     Create,
     Edit(String),
+}
+
+// Whether "No matches" can be told: only after a search that has come back.
+enum Search {
+    Idle,
+    Running,
+    Done,
 }
 
 enum Message {
@@ -80,8 +59,7 @@ struct MapApp {
     kind: Option<String>,
     typed: String,
     places: Vec<Place>,
-    searched: bool,
-    searching: bool,
+    search: Search,
     saving: bool,
     problem: String,
     sender: Sender<Message>,
@@ -136,30 +114,6 @@ fn run(args: Args, saved: Rc<RefCell<Option<String>>>) -> eframe::Result {
     )
 }
 
-fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
-    let first = args.next().ok_or("missing where to start")?;
-    if first != "--edit" {
-        return Ok(Args::Create {
-            center: coordinates(&first)?,
-        });
-    }
-    let area = args.next().ok_or("missing the area")?;
-    let summit = args.next().ok_or("missing the summit")?;
-    Ok(Args::Edit {
-        area,
-        summit: coordinates(&summit)?,
-        base: args.next().map(|base| coordinates(&base)).transpose()?,
-    })
-}
-
-fn coordinates(text: &str) -> Result<(f64, f64), String> {
-    let invalid = || format!("expected latitude,longitude in degrees, got {text}");
-    let (latitude, longitude) = text.split_once(',').ok_or_else(invalid)?;
-    let latitude: f64 = latitude.trim().parse().map_err(|_| invalid())?;
-    let longitude: f64 = longitude.trim().parse().map_err(|_| invalid())?;
-    Ok((latitude, longitude))
-}
-
 fn position((latitude, longitude): (f64, f64)) -> Position {
     lon_lat(longitude, latitude)
 }
@@ -205,8 +159,7 @@ impl MapApp {
             kind: None,
             typed: String::new(),
             places: Vec::new(),
-            searched: false,
-            searching: false,
+            search: Search::Idle,
             saving: false,
             problem: String::new(),
             sender,
@@ -219,8 +172,7 @@ impl MapApp {
         while let Ok(message) = self.receiver.try_recv() {
             match message {
                 Message::Found(Ok(places)) => {
-                    self.searching = false;
-                    self.searched = true;
+                    self.search = Search::Done;
                     self.places = places;
                 }
                 Message::Saved(Ok(())) => {
@@ -228,7 +180,7 @@ impl MapApp {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
                 Message::Found(Err(error)) | Message::Saved(Err(error)) => {
-                    self.searching = false;
+                    self.search = Search::Idle;
                     self.saving = false;
                     self.problem = error.to_string();
                 }
@@ -238,10 +190,10 @@ impl MapApp {
 
     // The engine runs as another process: these wait for it away from the window.
     fn search(&mut self, ctx: &egui::Context) {
-        if self.searching || self.typed.trim().is_empty() {
+        if matches!(self.search, Search::Running) || self.typed.trim().is_empty() {
             return;
         }
-        self.searching = true;
+        self.search = Search::Running;
         self.problem.clear();
         let typed = self.typed.clone();
         let sender = self.sender.clone();
@@ -289,8 +241,12 @@ impl MapApp {
             self.name.clone_from(&place.name);
             self.kind = Some(place.kind.clone());
         }
+        self.clear_results();
+    }
+
+    fn clear_results(&mut self) {
         self.places.clear();
-        self.searched = false;
+        self.search = Search::Idle;
     }
 
     fn map(&mut self, ui: &mut egui::Ui) {
@@ -335,17 +291,16 @@ impl MapApp {
                                 .desired_width(f32::INFINITY),
                         );
                         if field.changed() {
-                            self.places.clear();
-                            self.searched = false;
+                            self.clear_results();
                         }
                         if field.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter)) {
                             self.search(ui.ctx());
                         }
                     });
-                    if self.searching {
-                        note(ui, "Searching...");
-                    } else if self.searched && self.places.is_empty() {
-                        note(ui, "No matches");
+                    match self.search {
+                        Search::Running => note(ui, "Searching..."),
+                        Search::Done if self.places.is_empty() => note(ui, "No matches"),
+                        Search::Idle | Search::Done => {}
                     }
                     let mut chosen = None;
                     for place in &self.places {
@@ -413,8 +368,7 @@ impl eframe::App for MapApp {
             if self.places.is_empty() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             } else {
-                self.places.clear();
-                self.searched = false;
+                self.clear_results();
             }
         }
         self.map(ui);
@@ -432,14 +386,6 @@ impl eframe::App for MapApp {
                 );
             });
     }
-}
-
-// The panel's popups: background with a 2 px accent border and square corners.
-fn popup_frame() -> egui::Frame {
-    egui::Frame::NONE
-        .fill(translucent(BACKGROUND, SEE_THROUGH))
-        .stroke(Stroke::new(2.0, ACCENT))
-        .inner_margin(4.0)
 }
 
 fn note(ui: &mut egui::Ui, text: &str) {
@@ -474,24 +420,11 @@ fn place_row(ui: &mut egui::Ui, place: &Place) -> egui::Response {
     painter.text(
         Pos2::new(left, rect.center().y + 1.0),
         Align2::LEFT_TOP,
-        detail(place),
+        &place.detail,
         FontId::proportional(CAPTION),
         DIM,
     );
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
-}
-
-// "peak · 2502 m · Schwende-Rüte, Switzerland", as in the panel.
-fn detail(place: &Place) -> String {
-    let kind = place.kind.replace('_', " ");
-    let region = place
-        .description
-        .split_once(", ")
-        .map_or(place.description.as_str(), |(_, rest)| rest);
-    match place.elevation {
-        Some(elevation) => format!("{kind} · {elevation:.0} m · {region}"),
-        None => format!("{kind} · {region}"),
-    }
 }
 
 // Drawn, not a glyph: the panel font has no icons.
@@ -513,103 +446,6 @@ fn mark(painter: &egui::Painter, at: Pos2, label: &str, color: Color32) {
     painter.galley(corner, text, color);
 }
 
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "clamped to 0..=255 first"
-)]
-fn channel(value: f32) -> u8 {
-    value.round().clamp(0.0, 255.0) as u8
-}
-
-fn translucent(color: Color32, alpha: f32) -> Color32 {
-    let alpha = channel(alpha * 255.0);
-    Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
-}
-
-// The foreground over the background at Omarchy's fill strengths.
-fn mix(alpha: f32) -> Color32 {
-    let blend = |back: u8, front: u8| {
-        channel(f32::from(back) + (f32::from(front) - f32::from(back)) * alpha)
-    };
-    Color32::from_rgb(
-        blend(BACKGROUND.r(), FOREGROUND.r()),
-        blend(BACKGROUND.g(), FOREGROUND.g()),
-        blend(BACKGROUND.b(), FOREGROUND.b()),
-    )
-}
-
-fn omarchy_look(ctx: &egui::Context) {
-    ctx.add_font(FontInsert::new(
-        "JetBrains Mono",
-        FontData::from_static(include_bytes!(
-            "../../bar/ui/fonts/JetBrainsMono-Regular.ttf"
-        )),
-        vec![
-            InsertFontFamily {
-                family: FontFamily::Proportional,
-                priority: FontPriority::Highest,
-            },
-            InsertFontFamily {
-                family: FontFamily::Monospace,
-                priority: FontPriority::Highest,
-            },
-        ],
-    ));
-
-    let mut visuals = egui::Visuals::dark();
-    visuals.panel_fill = BACKGROUND;
-    visuals.window_fill = BACKGROUND;
-    visuals.extreme_bg_color = BACKGROUND;
-    visuals.override_text_color = Some(FOREGROUND);
-    visuals.selection.bg_fill = mix(0.35);
-    visuals.selection.stroke = Stroke::new(1.0, FOREGROUND);
-    visuals.window_corner_radius = CornerRadius::ZERO;
-    visuals.menu_corner_radius = CornerRadius::ZERO;
-    visuals.window_stroke = Stroke::new(2.0, ACCENT);
-    visuals.window_shadow = egui::Shadow::NONE;
-    visuals.popup_shadow = egui::Shadow::NONE;
-    // Save waits greyed until there is a summit and a name; at egui's 0.5, over the
-    // see-through fill, it was hard to read.
-    visuals.disabled_alpha = 0.7;
-    // Omarchy's [controls]: fill and border strength for idle, hover and press. The
-    // buttons sit on the map, so they let it show through.
-    let widgets = &mut visuals.widgets;
-    for (state, fill, border) in [
-        (&mut widgets.inactive, 0.04, 0.4),
-        (&mut widgets.hovered, 0.08, 0.25),
-        (&mut widgets.active, 0.22, 0.25),
-        (&mut widgets.open, 0.08, 0.25),
-    ] {
-        state.bg_fill = translucent(mix(fill), SEE_THROUGH);
-        state.weak_bg_fill = translucent(mix(fill), SEE_THROUGH);
-        state.bg_stroke = Stroke::new(1.0, translucent(FOREGROUND, border));
-        state.fg_stroke = Stroke::new(1.0, FOREGROUND);
-        state.corner_radius = CornerRadius::ZERO;
-        state.expansion = 0.0;
-    }
-    ctx.set_visuals_of(egui::Theme::Dark, visuals.clone());
-    ctx.set_visuals_of(egui::Theme::Light, visuals);
-
-    ctx.all_styles_mut(|style| {
-        use egui::TextStyle;
-        for (text_style, size) in [
-            (TextStyle::Small, CAPTION),
-            (TextStyle::Body, BODY),
-            (TextStyle::Button, BODY),
-            (TextStyle::Monospace, BODY),
-            (TextStyle::Heading, 16.0),
-        ] {
-            style
-                .text_styles
-                .insert(text_style, FontId::proportional(size));
-        }
-        style.spacing.button_padding = vec2(10.0, 6.0);
-        style.spacing.interact_size.y = ROW_HEIGHT;
-        style.spacing.item_spacing = vec2(GAP, GAP / 2.0);
-    });
-}
-
 // The tiles are kept on disk, as OpenStreetMap's tile policy asks.
 fn tile_cache() -> Option<PathBuf> {
     let base = env::var_os("XDG_CACHE_HOME")
@@ -617,57 +453,4 @@ fn tile_cache() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
     Some(base.join("peakcast").join("tiles"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(list: &[&str]) -> Result<Args, String> {
-        parse_args(list.iter().map(|text| text.to_string()))
-    }
-
-    #[test]
-    fn a_new_area_starts_where_it_is_told() {
-        assert!(matches!(
-            args(&["40.4,-3.7"]),
-            Ok(Args::Create {
-                center: (40.4, -3.7)
-            })
-        ));
-    }
-
-    #[test]
-    fn editing_brings_the_area_and_its_points() {
-        let read = args(&[
-            "--edit",
-            "Bödele ski resort",
-            "47.4031,9.8132",
-            "47.4178,9.8182",
-        ]);
-
-        let Ok(Args::Edit { area, summit, base }) = read else {
-            panic!("not an edit");
-        };
-        assert_eq!(area, "Bödele ski resort");
-        assert_eq!(summit, (47.4031, 9.8132));
-        assert_eq!(base, Some((47.4178, 9.8182)));
-        assert!(matches!(
-            args(&["--edit", "Lachen", "47.41,9.35"]),
-            Ok(Args::Edit { base: None, .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_missing_or_bad_points() {
-        assert!(args(&[]).is_err());
-        assert!(args(&["north"]).is_err());
-        assert!(args(&["--edit", "Lachen"]).is_err());
-    }
-
-    #[test]
-    fn fills_mix_foreground_into_background() {
-        assert_eq!(mix(0.0), BACKGROUND);
-        assert_eq!(mix(1.0), FOREGROUND);
-    }
 }
