@@ -23,7 +23,7 @@ default-members = ["."]
 
 # One version for the engine, the panel and the map: ./release changes it here.
 [workspace.package]
-version = "0.4.4"
+version = "0.4.5"
 edition = "2024"
 # Duration::from_hours and from_mins.
 rust-version = "1.91"
